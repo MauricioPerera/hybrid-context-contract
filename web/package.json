@@ -1,0 +1,23 @@
+{
+  "name": "hybrid-context-contract-playground",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "In-browser playground for the Hybrid Context Contract engine",
+  "scripts": {
+    "predev": "npm --prefix .. run build",
+    "dev": "vite",
+    "build": "npm --prefix .. run build && tsc --noEmit && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "gpt-tokenizer": "^3.4.0",
+    "js-sha256": "^0.11.0",
+    "js-yaml": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "typescript": "^5.5.4",
+    "vite": "^5.4.0"
+  }
+}

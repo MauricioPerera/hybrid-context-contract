@@ -3,6 +3,9 @@ dist/
 *.log
 .DS_Store
 
+# Local, machine-specific Claude settings (keep launch.json shared)
+.claude/settings.local.json
+
 # Compiled JS must live in dist/, never next to TS sources
 src/**/*.js
 tests/**/*.js

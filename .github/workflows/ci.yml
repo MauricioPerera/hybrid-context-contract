@@ -33,3 +33,18 @@ jobs:
 
       - name: Demo (integration scenarios)
         run: npm run demo
+
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+          cache: npm
+      - name: Install core dependencies
+        run: npm ci
+      - name: Install playground dependencies
+        run: npm --prefix web install
+      - name: Build playground (also builds the engine it imports)
+        run: npm --prefix web run build

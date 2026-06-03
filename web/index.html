@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Hybrid Context Contract — Playground</title>
+  </head>
+  <body>
+    <header class="topbar">
+      <div class="brand">
+        <span class="logo">⬡</span>
+        <div>
+          <h1>Hybrid Context Contract</h1>
+          <p class="tagline">Playground del harness de contexto — el motor corre en tu navegador</p>
+        </div>
+      </div>
+      <a class="repo" href="https://github.com/MauricioPerera/hybrid-context-contract" target="_blank" rel="noreferrer">GitHub ↗</a>
+    </header>
+
+    <main class="grid">
+      <!-- Left: editor -->
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Contrato</h2>
+          <span id="contract-status" class="status-pill"></span>
+        </div>
+        <textarea id="contract" spellcheck="false" class="code"></textarea>
+
+        <div class="controls">
+          <label class="ctrl">
+            <span>Tokenizador</span>
+            <select id="tokenizer">
+              <option value="heuristic">Heurístico (≈4 chars/token)</option>
+              <option value="gpt">GPT real (BPE cl100k)</option>
+            </select>
+          </label>
+          <label class="ctrl ctrl-slider">
+            <span>maxTotalTokens: <strong id="budget-val">—</strong></span>
+            <input id="budget" type="range" min="50" max="5000" step="50" />
+          </label>
+          <label class="ctrl ctrl-check">
+            <input id="interpolate" type="checkbox" />
+            <span>Interpolar <code>{slot}</code></span>
+          </label>
+        </div>
+
+        <div class="panel-head">
+          <h2>Inputs por slot</h2>
+        </div>
+        <div id="inputs"></div>
+      </section>
+
+      <!-- Right: results -->
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Veredicto</h2>
+          <span id="verdict" class="status-pill"></span>
+        </div>
+
+        <div class="budget-wrap">
+          <div class="budget-bar"><div id="budget-fill" class="budget-fill"></div></div>
+          <div class="budget-legend"><span id="budget-text">—</span></div>
+        </div>
+
+        <h3>Uso de slots</h3>
+        <div id="usage" class="usage"></div>
+
+        <h3>Hallazgos</h3>
+        <div id="findings" class="findings"></div>
+
+        <h3>Payload ensamblado</h3>
+        <pre id="payload" class="payload"></pre>
+      </section>
+    </main>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

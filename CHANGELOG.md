@@ -8,6 +8,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado
 ### Added
 - **Diff semántico** detecta más regresiones de política de contexto: `maxTokens` de slot reducido, slot que deja de ser `immutable`, `compaction` que pasa de `error` a una estrategia con pérdida, slot que deja de ser `required`, severidad de regla rebajada, y regla eliminada.
 - **Interpolación de referencias** opt-in (`new Engine(contract, { interpolate: true })`): resuelve `{slot}` y `{slot.key}` antes de presupuestar (una pasada, cycle-safe); las referencias rotas quedan para la regla `broken-ref`.
+- **Playground web** (`web/`): dashboard estático (Vite + TS) que ejecuta el motor en el navegador — editor de contrato e inputs, presupuesto con slider, selector de tokenizador (heurístico / GPT real bajo demanda), toggle de interpolación, linter y payload en vivo. Job de CI que verifica su build.
 
 ## [1.0.0] - 2026-06-03
 

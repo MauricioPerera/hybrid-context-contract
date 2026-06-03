@@ -208,6 +208,19 @@ Para correr el set de pruebas automáticas:
 npm test
 ```
 
+## 🖥️ Playground (web)
+
+Un dashboard estático que **ejecuta el motor en el navegador** (sin backend): edita el contrato y los inputs y ve en vivo el presupuesto de tokens, el uso por slot, el linter y el payload ensamblado. Incluye slider de `maxTotalTokens`, selector de tokenizador (heurístico / GPT real BPE, cargado bajo demanda) y toggle de interpolación.
+
+```bash
+cd web
+npm install
+npm run dev      # compila el motor e inicia Vite
+# o: npm run build  → genera un sitio estático en web/dist/
+```
+
+Código en [web/](web/).
+
 ## ⚠️ Limitaciones conocidas y Roadmap
 
 Esta versión es funcional pero tiene atajos deliberados que conviene conocer antes de usarla en producción:
