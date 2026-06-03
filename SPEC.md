@@ -127,6 +127,14 @@ const engine = new Engine(contract, {
 
 ---
 
+### 4.2 Interpolación de referencias (opt-in)
+Con `new Engine(contract, { interpolate: true })`, **antes** de presupuestar se resuelven las referencias en los inputs:
+- `{slot}` → texto crudo del input de ese slot.
+- `{slot.key}` → valor de `key` si el input del slot es un objeto JSON (los no-string se serializan).
+- Referencias a slots inexistentes (o claves no resolubles) se **dejan literales**, de modo que la regla `broken-ref` (§5.4) siga marcando las verdaderamente rotas.
+
+Es **una sola pasada**: cada referencia resuelve contra los inputs **originales** (no contra valores ya interpolados), lo que la hace **cycle-safe** y determinista. Como ocurre antes del presupuesto, la compactación y el **invariante de presupuesto** se aplican al contenido ya interpolado. Por defecto está **desactivada** (no altera el comportamiento).
+
 ## 5. Validación / Linter (`lint`)
 
 Las reglas del contrato se ejecutan sobre los textos **ya asignados** (post-compactación). Cada regla se despacha a un **handler** registrado por su `type` (registro = built-ins + handlers personalizados inyectados; ver §5.7). Si no hay handler para el `type`, se emite un hallazgo `warning` con regla `unknown-rule-type` y la regla se omite. Tipos built-in:

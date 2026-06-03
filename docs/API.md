@@ -17,7 +17,8 @@ Motor de ensamblado y validación. Se construye con un contrato ya validado y, o
 const engine = new Engine(contract /* : ContextContract */, {
   tokenizer,     /* ?: Tokenizer — por defecto, heurístico 4 chars/token */
   ruleHandlers,  /* ?: Record<string, RuleHandler> — reglas personalizadas (sobrescriben built-ins por tipo) */
-  compactors     /* ?: Record<string, Compactor> — estrategias de compactación (sobrescriben built-ins por nombre) */
+  compactors,    /* ?: Record<string, Compactor> — estrategias de compactación (sobrescriben built-ins por nombre) */
+  interpolate    /* ?: boolean — resuelve {slot}/{slot.key} antes de presupuestar (def. false) */
 });
 ```
 

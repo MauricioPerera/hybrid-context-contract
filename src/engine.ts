@@ -304,6 +304,7 @@ export class Engine {
   private tokenizer: Tokenizer;
   private ruleHandlers: Record<string, RuleHandler>;
   private compactors: Record<string, Compactor>;
+  private interpolate: boolean;
 
   constructor(
     contract: ContextContract,
@@ -311,6 +312,7 @@ export class Engine {
       tokenizer?: Tokenizer;
       ruleHandlers?: Record<string, RuleHandler>;
       compactors?: Record<string, Compactor>;
+      interpolate?: boolean;
     } = {}
   ) {
     this.contract = contract;
@@ -318,6 +320,45 @@ export class Engine {
     // Custom handlers/compactors override/extend the built-ins by name.
     this.ruleHandlers = { ...builtinRuleHandlers, ...(options.ruleHandlers || {}) };
     this.compactors = { ...builtinCompactors, ...(options.compactors || {}) };
+    this.interpolate = options.interpolate ?? false;
+  }
+
+  /**
+   * Resolves `{slot}` and `{slot.key}` references in a text against the given inputs.
+   * - `{slot}` -> the slot's raw input text.
+   * - `{slot.key}` -> the value at `key` if the slot's input is a JSON object.
+   * References to unknown slots (or unresolved keys) are left verbatim, so the
+   * `broken-ref` rule can still flag genuinely broken references.
+   */
+  private resolveRefs(text: string, inputs: Record<string, string>): string {
+    return text.replace(/\{([a-zA-Z0-9_-]+)(?:\.([a-zA-Z0-9_-]+))?\}/g, (whole, slot, key) => {
+      if (!(slot in inputs)) return whole;
+      const raw = inputs[slot];
+      if (key === undefined) return raw;
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === 'object' && key in obj) {
+          const v = (obj as Record<string, unknown>)[key];
+          return typeof v === 'string' ? v : JSON.stringify(v);
+        }
+      } catch {
+        /* not JSON — fall through */
+      }
+      return whole;
+    });
+  }
+
+  /**
+   * Single-pass interpolation: every reference resolves against the ORIGINAL
+   * inputs (not against already-interpolated values), which makes it inherently
+   * cycle-safe and deterministic.
+   */
+  private interpolateInputs(inputs: Record<string, string>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const [name, text] of Object.entries(inputs)) {
+      out[name] = this.resolveRefs(text, inputs);
+    }
+    return out;
   }
 
   /**
@@ -332,21 +373,25 @@ export class Engine {
     const allocatedTexts: Record<string, string> = {};
     const findings: ValidationFinding[] = [];
 
+    // Resolve {slot} references before budgeting, so compaction and the budget
+    // invariant apply to the final (interpolated) content. Opt-in; no-op by default.
+    const src = this.interpolate ? this.interpolateInputs(inputs) : inputs;
+
     // Sort slots by priority: lowest priority number = highest importance (allocated first)
     const sortedSlots = [...this.contract.slots].sort((a, b) => a.priority - b.priority);
 
     let remainingTotalTokens = this.contract.maxTotalTokens;
 
     for (const slot of sortedSlots) {
-      const rawText = inputs[slot.name] || '';
+      const rawText = src[slot.name] || '';
       const requestedTokens = this.tokenizer.countTokens(rawText);
-      
+
       // Default state
       let allocatedTokens = 0;
       let status: SlotUsageInfo['status'] = 'ok';
       let finalText = '';
 
-      if (slot.required && !inputs[slot.name]) {
+      if (slot.required && !src[slot.name]) {
         findings.push({
           severity: 'error',
           rule: 'required-slot-missing',
@@ -357,7 +402,7 @@ export class Engine {
         continue;
       }
 
-      if (!inputs[slot.name]) {
+      if (!src[slot.name]) {
         usage[slot.name] = { requestedTokens: 0, allocatedTokens: 0, status: 'omitted' };
         continue;
       }

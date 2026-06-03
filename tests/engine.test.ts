@@ -389,6 +389,44 @@ describe('Schema and immutable-hash rules', () => {
   });
 });
 
+describe('Reference interpolation ({slot})', () => {
+  const contract: ContextContract = {
+    version: '1.0.0',
+    name: 'interp-contract',
+    maxTotalTokens: 1000,
+    slots: [
+      { name: 'guidelines', source: 'static', priority: 0, required: true, compaction: 'truncate', format: 'text', immutable: false },
+      { name: 'metadata', source: 'environment', priority: 1, required: true, compaction: 'truncate', format: 'json', immutable: false },
+      { name: 'user_message', source: 'dynamic', priority: 2, required: true, compaction: 'truncate', format: 'text', immutable: false }
+    ],
+    rules: [
+      { name: 'refs', type: 'broken-ref', targetSlot: 'user_message', severity: 'warning' }
+    ]
+  };
+
+  const inputs = {
+    guidelines: 'BE CONCISE',
+    metadata: '{"target_branch":"main"}',
+    user_message: 'Follow {guidelines} on branch {metadata.target_branch}; see {nope}.'
+  };
+
+  it('is off by default (references left verbatim)', () => {
+    const result = new Engine(contract).assemble(inputs);
+    assert.ok(result.content.includes('Follow {guidelines} on branch {metadata.target_branch}'));
+  });
+
+  it('resolves {slot} and {slot.key} when enabled', () => {
+    const result = new Engine(contract, { interpolate: true }).assemble(inputs);
+    assert.ok(result.content.includes('Follow BE CONCISE on branch main'));
+  });
+
+  it('leaves genuinely broken refs for the broken-ref rule to flag', () => {
+    const result = new Engine(contract, { interpolate: true }).assemble(inputs);
+    assert.ok(result.content.includes('{nope}')); // unresolved, left verbatim
+    assert.ok(result.verdict.findings.some(f => f.rule === 'refs' && f.message.includes('nope')));
+  });
+});
+
 describe('Custom rule handlers (extensibility)', () => {
   const base = (ruleType: string): ContextContract => ({
     version: '1.0.0',

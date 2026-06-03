@@ -7,6 +7,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado
 
 ### Added
 - **Diff semántico** detecta más regresiones de política de contexto: `maxTokens` de slot reducido, slot que deja de ser `immutable`, `compaction` que pasa de `error` a una estrategia con pérdida, slot que deja de ser `required`, severidad de regla rebajada, y regla eliminada.
+- **Interpolación de referencias** opt-in (`new Engine(contract, { interpolate: true })`): resuelve `{slot}` y `{slot.key}` antes de presupuestar (una pasada, cycle-safe); las referencias rotas quedan para la regla `broken-ref`.
 
 ## [1.0.0] - 2026-06-03
 
