@@ -25,7 +25,8 @@
   "files": [
     "dist/src",
     "SPEC.md",
-    "docs"
+    "docs",
+    "CHANGELOG.md"
   ],
   "engines": {
     "node": ">=20"

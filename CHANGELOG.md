@@ -1,0 +1,36 @@
+# Changelog
+
+Todas las modificaciones notables de este proyecto se documentan aquí.
+El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado [SemVer](https://semver.org/).
+
+## [1.0.0] - 2026-06-03
+
+Primer release. Framework para definir, mezclar y validar **Contratos de Contexto Híbrido** con validación determinista para LLMs y sistemas de agentes.
+
+### Added
+- **Motor (`Engine`)**: presupuesto de tokens por prioridad, compactación, linter determinista y ensamblado del payload.
+- **Tokenización enchufable**: interfaz `Tokenizer` con `heuristicTokenizer` (4 chars/token) por defecto y `truncateToTokens()` que respeta el presupuesto con cualquier tokenizador (búsqueda binaria *surrogate-safe*).
+  - Adaptador opcional `gpt-tokenizer` (BPE real de OpenAI) en `adapters/gpt-tokenizer`.
+- **Reglas extensibles**: registro de `RuleHandler` despachado por `type`. Built-ins: `regex`, `schema`, `immutable-hash`, `broken-ref`. Reglas personalizadas vía `{ ruleHandlers }`.
+  - Adaptador opcional `ajv` (JSON Schema completo) en `adapters/ajv-schema`.
+- **Compactación enchufable**: registro de `Compactor` por `slot.compaction`. Built-ins `truncate`/`summarize`; estrategias personalizadas vía `{ compactors }`.
+- **CLI** (`hcc`): comandos `lint`, `assemble`, `diff`, `spec` y `hash` (genera/firma el archivo de hashes de inmutabilidad). Opción `--tokenizer heuristic|gpt`.
+- **Diff semántico** de contratos con detección de regresiones de política.
+- **Documentación**: `README.md`, especificación normativa `SPEC.md`, referencia de API `docs/API.md`.
+- **Demo** (`npm run demo`): cuatro escenarios de CI como prueba ejecutable.
+- **Tooling**: build TypeScript con emisión de tipos, tests (`node:test`), CI en Node 20/22, licencia MIT, `.gitignore`/`.gitattributes`.
+
+### Security
+- `assemble` **no escribe** el payload si la validación falla (evita persistir secretos/prompts manipulados).
+- **Garantía de presupuesto** mantenida bajo cualquier tokenizador y compactor (el motor recorta resultados que excedan el límite).
+- Firma SHA-256 de slots inmutables y detección de *drift* (prompt injection).
+- **Mitigación ReDoS**: detección heurística de patrones con cuantificadores anidados (`unsafe-regex-pattern`) y evaluación de input acotada en longitud.
+
+### Known limitations
+- El tokenizador por defecto es una heurística; usa el adaptador `gpt-tokenizer` para conteos exactos.
+- `summarize` built-in trunca con marcador (no resume); inyecta un compactor propio para resumen real.
+- `schema` built-in es validación simplificada; usa el adaptador `ajv` para JSON Schema completo.
+- La mitigación ReDoS es heurística (cubre la clase dominante, no garantiza el 100%).
+- Las referencias `{slot}` se detectan pero no se interpolan.
+
+[1.0.0]: https://github.com/mauricioperera/hybrid-context-contract/releases/tag/v1.0.0
