@@ -521,6 +521,28 @@ describe('CLI (end-to-end against example fixtures)', () => {
       'assemble must not write the payload when the verdict is invalid');
   });
 
+  it('hash: generated signatures make lint pass, and detect tampering', () => {
+    const hashPath = 'example/scenario-test-hashes.json';
+    if (fs.existsSync(hashPath)) fs.rmSync(hashPath);
+
+    const gen = runCli(['hash', '--contract', 'example/agent-contract.yaml', '--inputs', 'example/inputs', '--output', hashPath]);
+    assert.strictEqual(gen.status, 0);
+    assert.ok(fs.existsSync(hashPath));
+    const hashes = JSON.parse(fs.readFileSync(hashPath, 'utf8'));
+    assert.strictEqual(typeof hashes.system, 'string');
+    assert.strictEqual(hashes.system.length, 64); // SHA-256 hex
+
+    // lint with the freshly generated signatures passes
+    const ok = runCli(['lint', '--contract', 'example/agent-contract.yaml', '--inputs', 'example/inputs', '--hashes', hashPath]);
+    assert.strictEqual(ok.status, 0);
+
+    // the same signatures detect a tampered immutable system prompt
+    const drift = runCli(['lint', '--contract', 'example/agent-contract.yaml', '--inputs', 'example/scenario-drift', '--hashes', hashPath]);
+    assert.strictEqual(drift.status, 1);
+
+    fs.rmSync(hashPath);
+  });
+
   it('diff: detects regressions between v1 and v2 and exits 1', () => {
     const { status, stdout } = runCli([
       'diff',

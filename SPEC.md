@@ -221,7 +221,10 @@ Binario: `dist/src/cli.js`. Comandos y exit codes:
 | `lint`     | `--contract`, `--inputs`, `--hashes?`                          | `verdict.valid === true`  | hay hallazgos `error`                      |
 | `assemble` | `--contract`, `--inputs`, `--output`, `--hashes?`              | `verdict.valid === true` (escribe el `--output`) | `verdict.valid === false` (**no** escribe) |
 | `diff`     | `--old`, `--new`, `--format?` (`markdown`\|`json`)             | sin regresiones           | hay ≥1 regresión                           |
+| `hash`     | `--contract`, `--inputs`, `--output?`, `--all?`                | siempre (firma y escribe/imprime) | error transversal                  |
 | `spec`     | `--contract`                                                   | siempre (imprime JSON)    | —                                          |
+
+**`hash`** genera/actualiza el archivo de hashes esperados. Por defecto firma solo los slots que el linter verifica contra firma — los `immutable: true` y los `targetSlot` de reglas `immutable-hash` —; con `--all` firma todos los slots presentes en los inputs. Si `--output` ya existe, **fusiona** sobre él (preserva entradas manuales). Sin `--output`, imprime el JSON por stdout. El hash se computa sobre el **contenido crudo del input** del slot (que coincide con el texto asignado cuando el slot no se compacta, como debe ser para un slot inmutable).
 
 Condiciones de error transversales (exit `1`): archivo de contrato no encontrado, contrato que no valida el esquema, directorio de inputs no encontrado, opciones requeridas ausentes. Un archivo de hashes ausente produce **warning** y se continúa sin chequeos de hash.
 

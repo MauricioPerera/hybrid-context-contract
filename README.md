@@ -78,12 +78,24 @@ npm run cli -- lint --contract path/to/contract.yaml --inputs path/to/inputs_dir
 - Si hay infracciones con severidad `error`, la CLI imprime los hallazgos y termina con un código de salida `1` (ideal para CI/CD).
 - Si solo hay advertencias o información, o el contrato es completamente válido, termina con `0`.
 
+El conteo de tokens es enchufable: añade `--tokenizer gpt` a `lint`/`assemble` para usar tokens BPE reales (OpenAI) en lugar de la heurística por defecto.
+
 ### 2. Ensamblar Contexto (`assemble`)
 Asigna los budgets de tokens por prioridad, corta/resume los slots según corresponda, ejecuta el linter, y emite el payload listo para inyectarse al LLM.
 
 ```bash
 npm run cli -- assemble --contract path/to/contract.yaml --inputs path/to/inputs_dir --output path/to/assembled_output.txt --hashes path/to/expected_hashes.json
 ```
+- Si la validación falla, **no escribe** el payload (evita persistir secretos/prompts manipulados) y termina con `1`.
+
+### 2b. Firmar Hashes de Inmutabilidad (`hash`)
+Genera (o actualiza) el archivo de hashes esperados a partir de los inputs, en vez de mantenerlo a mano. Por defecto firma solo los slots inmutables y los objetivos de reglas `immutable-hash`; con `--all` firma todos.
+
+```bash
+npm run cli -- hash --contract path/to/contract.yaml --inputs path/to/inputs_dir --output path/to/expected_hashes.json
+```
+- Sin `--output`, imprime el JSON por stdout. Si el archivo existe, fusiona preservando entradas manuales.
+- Flujo típico: ejecutar `hash` al actualizar deliberadamente un prompt inmutable; luego `lint` detecta cualquier cambio no firmado.
 
 ### 3. Comparar Contratos y Detectar Regresiones (`diff`)
 Compara semánticamente dos contratos (ej. rama actual vs rama principal en Git). Detecta cambios de tokens, slots eliminados, y **regresiones estructurales** como reducciones del budget total o degradación de prioridades de slots críticos.

@@ -2,7 +2,7 @@
 import fs from 'fs';
 import path from 'path';
 import yaml from 'js-yaml';
-import { Engine } from './engine.js';
+import { Engine, computeHash } from './engine.js';
 import { diffContracts, formatDiffMarkdown } from './diff.js';
 import { ContextContractSchema, ContextContract, Tokenizer } from './types.js';
 
@@ -44,6 +44,15 @@ Commands:
                 --output <path>       Path to save the assembled output text file
                 --hashes <path>       (Optional) Path to JSON file containing expected SHA-256 hashes
                 --tokenizer <name>    (Optional) 'heuristic' (default) or 'gpt' (real OpenAI BPE counts)
+
+  hash        Generates/updates the expected SHA-256 hashes file from inputs.
+              By default signs only slots that need it (immutable slots and
+              immutable-hash rule targets); use --all to sign every input slot.
+              Options:
+                --contract <path>     Path to contract file
+                --inputs <dir>        Directory containing input files
+                --output <path>       (Optional) Hashes JSON to write/update; prints to stdout if omitted
+                --all                 Sign every slot present in inputs
 
   diff        Compares two contract definitions and reports modifications and regressions.
               Options:
@@ -212,6 +221,67 @@ async function main() {
 
       fs.writeFileSync(outputPath, result.content, 'utf8');
       console.log(`\nOutput written to: ${outputPath}`);
+      process.exit(0);
+    }
+
+    case 'hash': {
+      const contractPath = options.contract;
+      const inputsDir = options.inputs;
+      const outputPath = options.output;
+      const all = options.all === 'true';
+
+      if (!contractPath || !inputsDir) {
+        console.error('Error: --contract and --inputs are required for "hash".');
+        printHelp();
+        process.exit(1);
+      }
+
+      const contract = readContract(contractPath);
+      const inputs = readInputsDir(inputsDir);
+
+      // Slots that the linter actually verifies against a signature:
+      // immutable slots (implicit drift check) + immutable-hash rule targets.
+      const needsSigning = new Set<string>();
+      for (const slot of contract.slots) if (slot.immutable) needsSigning.add(slot.name);
+      for (const rule of contract.rules) if (rule.type === 'immutable-hash') needsSigning.add(rule.targetSlot);
+
+      const targets = all
+        ? Object.keys(inputs)
+        : contract.slots.map(s => s.name).filter(n => needsSigning.has(n));
+
+      // Merge over any existing hashes file so manual entries are preserved.
+      let hashes: Record<string, string> = {};
+      if (outputPath && fs.existsSync(outputPath)) {
+        try { hashes = JSON.parse(fs.readFileSync(outputPath, 'utf8')); } catch { hashes = {}; }
+      }
+
+      const signed: string[] = [];
+      const missing: string[] = [];
+      for (const name of targets) {
+        const text = inputs[name];
+        if (text === undefined || text === '') { missing.push(name); continue; }
+        hashes[name] = computeHash(text);
+        signed.push(name);
+      }
+
+      const json = JSON.stringify(hashes, null, 2) + '\n';
+      if (outputPath) {
+        fs.writeFileSync(outputPath, json, 'utf8');
+        console.log(`\n=== Hash Summary ===`);
+        console.log(`Contract: ${contract.name} (v${contract.version})`);
+        console.log(`Signed ${signed.length} slot(s): ${signed.join(', ') || '(none)'}`);
+        console.log(`Written to: ${outputPath}`);
+      } else {
+        process.stdout.write(json);
+      }
+
+      if (missing.length > 0) {
+        console.warn(`\n⚠️  Warning: no input found for slot(s) to sign: ${missing.join(', ')}`);
+      }
+      if (!all && targets.length === 0) {
+        console.warn(`\n⚠️  Warning: no immutable slots or immutable-hash rules in the contract. Use --all to sign every slot.`);
+      }
+
       process.exit(0);
     }
 
