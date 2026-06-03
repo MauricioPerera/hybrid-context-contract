@@ -44,7 +44,7 @@ Un contrato que no satisface el esquema **DEBE** ser rechazado (la CLI termina c
 | `priority`    | number                                                 | sí        | —           | entero, `>= 0`           |
 | `maxTokens`   | number                                                 | no        | —           | entero, positivo         |
 | `immutable`   | boolean                                                | no        | `false`     | —                        |
-| `compaction`  | `truncate` \| `summarize` \| `error`                   | no        | `error`     | estrategia ante overflow |
+| `compaction`  | string                                                 | no        | `error`     | `error`, un built-in (`truncate`/`summarize`) o una estrategia personalizada registrada en el `Engine` |
 | `format`      | `text` \| `json` \| `markdown`                         | no        | `text`      | metadato de formato      |
 | `required`    | boolean                                                | no        | `true`      | —                        |
 | `description` | string                                                 | no        | —           | documentación            |
@@ -99,10 +99,11 @@ Para cada slot, con `raw = inputs[slot.name] || ''`:
 3. **Límite efectivo del slot:**
    `slotLimit = slot.maxTokens ? min(slot.maxTokens, remainingTotalTokens) : remainingTotalTokens`.
 4. **Cabe** (`requestedTokens <= slotLimit`): se asigna el texto íntegro; estado `ok`.
-5. **No cabe** — se aplica `compaction`:
-   - `error`: hallazgo `error` regla `budget-overflow-error`; texto vacío; estado `omitted`; `allocatedTokens = 0`.
-   - `truncate`: `finalText = truncateToTokens(raw, slotLimit, tokenizer)`; estado `truncated`; hallazgo `warning` regla `budget-truncated`; `allocatedTokens = countTokens(finalText)`.
-   - `summarize`: reserva el coste en tokens del marcador `\n\n[... Content truncated & summarized ...]`, trunca el cuerpo a `slotLimit - markerTokens`, concatena el marcador y, si aún excede, vuelve a truncar el conjunto a `slotLimit` como tope duro; estado `summarized`; hallazgo `warning` regla `budget-summarized`; `allocatedTokens = countTokens(finalText)`.
+5. **No cabe** — según `compaction`:
+   - `error` (política, no transformación): hallazgo `error` regla `budget-overflow-error`; texto vacío; estado `omitted`; `allocatedTokens = 0`.
+   - cualquier otro valor: se despacha al **compactor** registrado con ese nombre (built-in o personalizado; ver §4.1). Si no hay compactor: hallazgo `error` regla `unknown-compaction-strategy`, `omitted`. El motor **recorta el resultado del compactor a `slotLimit`** si lo excede (garantía dura). `allocatedTokens = countTokens(finalText)`.
+     - built-in `truncate`: `truncateToTokens(raw, slotLimit, tokenizer)`; estado `truncated`; `warning` `budget-truncated`.
+     - built-in `summarize`: reserva el coste del marcador `\n\n[... Content truncated & summarized ...]`, trunca el cuerpo a `slotLimit - markerTokens`, concatena el marcador (y reclampa si excede); estado `summarized`; `warning` `budget-summarized`.
 6. Tras asignar: `remainingTotalTokens -= allocatedTokens`.
 
 **Invariante de presupuesto:** ningún slot **DEBE** producir un texto cuyo coste en tokens (medido con el tokenizador activo) supere su `slotLimit`. (Esto incluye `summarize`, que recorta el resultado final con el marcador incluido.)
@@ -110,6 +111,19 @@ Para cada slot, con `raw = inputs[slot.name] || ''`:
 **Nota de orden vs. salida:** la asignación ocurre en orden de prioridad, pero el ensamblado (§6) emite los slots en el **orden de definición** del contrato.
 
 **Caso límite — cadena vacía:** una entrada `''` se trata como ausente (`raw || ''` ⇒ vacío). Un slot requerido con entrada vacía dispara `required-slot-missing`.
+
+### 4.1 Compactores personalizados (extensibilidad)
+La compactación se despacha a un `Compactor` (`(text, ctx) => { text, status?, findings? }`) buscado por el valor de `slot.compaction` en un registro (built-ins + inyectados):
+
+```ts
+const engine = new Engine(contract, {
+  compactors: { 'llm-summary': async-free-wrapper-o-función-síncrona }
+});
+```
+
+- `CompactionContext` expone: `slot`, `maxTokens`, `tokenizer`, `requestedTokens` y `truncateToTokens`.
+- Un compactor personalizado con el mismo nombre que un built-in lo **sobrescribe**.
+- **Garantía:** el motor recorta el resultado a `maxTokens` aunque el compactor se exceda, así que el invariante de presupuesto se mantiene incluso con compactores no confiables (p. ej. un resumen vía LLM). Los compactores son síncronos; para un resumen asíncrono, precalcúlalo y pásalo como input, o envuelve un cache síncrono.
 
 ---
 

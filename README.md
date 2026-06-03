@@ -178,6 +178,23 @@ const engine = new Engine(contract, {
 
 Un `type` sin handler registrado produce un hallazgo `warning` (`unknown-rule-type`) y se omite. Ver [docs/API.md](docs/API.md) para `RuleHandler`/`RuleContext`.
 
+### Compactación personalizada
+
+La estrategia `compaction` de cada slot también se despacha a un compactor registrado. Puedes enchufar el tuyo (p. ej. un resumen real) además de los built-in `truncate`/`summarize`:
+
+```typescript
+const engine = new Engine(contract, {
+  compactors: {
+    'head-tail': (text, { maxTokens, tokenizer, truncateToTokens }) => ({
+      text: truncateToTokens(text, maxTokens, tokenizer), // tu lógica aquí
+      status: 'summarized'
+    })
+  }
+});
+```
+
+El motor **recorta el resultado al presupuesto del slot aunque el compactor se exceda**, de modo que el límite de tokens se respeta incluso con compactores no confiables.
+
 ---
 
 ## 🧪 Ejecución de Pruebas
@@ -192,7 +209,7 @@ npm test
 Esta versión es funcional pero tiene atajos deliberados que conviene conocer antes de usarla en producción:
 
 - **Conteo de tokens**: por defecto usa la heurística `1 token ≈ 4 caracteres`. Para presupuestos exactos, el tokenizador es **enchufable**: usa `--tokenizer gpt` en la CLI o inyecta `gptTokenizer` en el `Engine` para contar tokens BPE reales (OpenAI cl100k_base). El truncado respeta el presupuesto con cualquier tokenizador.
-- **`compaction: "summarize"` no resume**: trunca y añade un marcador. *(Roadmap: estrategia de compactación enchufable, opcionalmente vía LLM.)*
+- **`compaction: "summarize"` (built-in) no resume**: trunca y añade un marcador. Pero la compactación es **enchufable**: inyecta un compactor propio (p. ej. un resumen real vía LLM) con `{ compactors }`. El motor recorta el resultado al presupuesto aunque el compactor se exceda.
 - **`type: "schema"` es validación simplificada**: solo comprueba la presencia de claves de primer nivel listadas en `required`, no es JSON Schema completo. *(Roadmap: integrar `ajv`/Zod.)*
 - **Referencias `{slot}`**: solo se *detectan* las rotas (`broken-ref`); no hay interpolación/sustitución de referencias válidas.
 - **Reglas regex**: se ejecutan sobre contenido arbitrario sin protección contra ReDoS. Audita los patrones del contrato.

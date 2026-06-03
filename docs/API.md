@@ -16,7 +16,8 @@ Motor de ensamblado y validación. Se construye con un contrato ya validado y, o
 ```ts
 const engine = new Engine(contract /* : ContextContract */, {
   tokenizer,     /* ?: Tokenizer — por defecto, heurístico 4 chars/token */
-  ruleHandlers   /* ?: Record<string, RuleHandler> — reglas personalizadas (sobrescriben built-ins por tipo) */
+  ruleHandlers,  /* ?: Record<string, RuleHandler> — reglas personalizadas (sobrescriben built-ins por tipo) */
+  compactors     /* ?: Record<string, Compactor> — estrategias de compactación (sobrescriben built-ins por nombre) */
 });
 ```
 
@@ -94,6 +95,25 @@ interface RuleContext {
 }
 ```
 Los handlers built-in se exportan como `builtinRuleHandlers: Record<string, RuleHandler>`. Un handler personalizado con el mismo tipo sobrescribe al built-in. Un `type` sin handler produce un hallazgo `warning` (`unknown-rule-type`).
+
+### `Compactor` / `CompactionContext` / `CompactionResult`
+```ts
+type Compactor = (text: string, ctx: CompactionContext) => CompactionResult;
+
+interface CompactionContext {
+  slot: SlotDefinition;
+  maxTokens: number;               // presupuesto a respetar
+  tokenizer: Tokenizer;
+  requestedTokens: number;         // tokens del texto original
+  truncateToTokens: (text: string, maxTokens: number, tokenizer: Tokenizer) => string;
+}
+interface CompactionResult {
+  text: string;                    // el motor lo recorta a maxTokens si excede
+  status?: 'truncated' | 'summarized';
+  findings?: ValidationFinding[];
+}
+```
+Built-ins exportados como `builtinCompactors: Record<string, Compactor>` (`truncate`, `summarize`). Se seleccionan por `slot.compaction`; `error` es especial (falla, no compacta). Una estrategia sin compactor produce un hallazgo `error` (`unknown-compaction-strategy`).
 
 ### `ContextContract`
 ```ts

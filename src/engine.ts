@@ -10,7 +10,8 @@ import {
   AssembledPayload,
   Tokenizer,
   RuleContext,
-  RuleHandler
+  RuleHandler,
+  Compactor
 } from './types.js';
 
 /**
@@ -183,19 +184,72 @@ export const builtinRuleHandlers: Record<string, RuleHandler> = {
   'broken-ref': brokenRefRuleHandler
 };
 
+// ---------------------------------------------------------------------------
+// Built-in compaction strategies. Each fits an oversized slot to its budget.
+// The engine clamps any compactor's output to maxTokens, so the budget invariant
+// holds even for custom (e.g. LLM-based) compactors that might overshoot.
+// ---------------------------------------------------------------------------
+
+const truncateCompactor: Compactor = (text, { slot, maxTokens, tokenizer, requestedTokens }) => {
+  const out = truncateToTokens(text, maxTokens, tokenizer);
+  return {
+    text: out,
+    status: 'truncated',
+    findings: [{
+      severity: 'warning',
+      rule: 'budget-truncated',
+      message: `Slot "${slot.name}" truncated to fit allocated budget of ${maxTokens} tokens (originally ${requestedTokens} tokens).`,
+      slot: slot.name
+    }]
+  };
+};
+
+const summarizeCompactor: Compactor = (text, { slot, maxTokens, tokenizer }) => {
+  const marker = '\n\n[... Content truncated & summarized ...]';
+  const markerTokens = tokenizer.countTokens(marker);
+  const bodyBudget = Math.max(0, maxTokens - markerTokens);
+  const body = truncateToTokens(text, bodyBudget, tokenizer);
+  let out = body + marker;
+  if (tokenizer.countTokens(out) > maxTokens) {
+    out = truncateToTokens(out, maxTokens, tokenizer);
+  }
+  return {
+    text: out,
+    status: 'summarized',
+    findings: [{
+      severity: 'warning',
+      rule: 'budget-summarized',
+      message: `Slot "${slot.name}" compacted (summarized) to fit budget of ${maxTokens} tokens.`,
+      slot: slot.name
+    }]
+  };
+};
+
+/** The compaction strategies shipped with the engine, keyed by name. */
+export const builtinCompactors: Record<string, Compactor> = {
+  'truncate': truncateCompactor,
+  'summarize': summarizeCompactor
+};
+
 export class Engine {
   private contract: ContextContract;
   private tokenizer: Tokenizer;
   private ruleHandlers: Record<string, RuleHandler>;
+  private compactors: Record<string, Compactor>;
 
   constructor(
     contract: ContextContract,
-    options: { tokenizer?: Tokenizer; ruleHandlers?: Record<string, RuleHandler> } = {}
+    options: {
+      tokenizer?: Tokenizer;
+      ruleHandlers?: Record<string, RuleHandler>;
+      compactors?: Record<string, Compactor>;
+    } = {}
   ) {
     this.contract = contract;
     this.tokenizer = options.tokenizer ?? heuristicTokenizer;
-    // Custom handlers override/extend the built-ins by rule type.
+    // Custom handlers/compactors override/extend the built-ins by name.
     this.ruleHandlers = { ...builtinRuleHandlers, ...(options.ruleHandlers || {}) };
+    this.compactors = { ...builtinCompactors, ...(options.compactors || {}) };
   }
 
   /**
@@ -247,49 +301,45 @@ export class Engine {
         allocatedTokens = requestedTokens;
         finalText = rawText;
         status = 'ok';
+      } else if (slot.compaction === 'error') {
+        // 'error' is a policy, not a transformation: fail instead of compacting.
+        findings.push({
+          severity: 'error',
+          rule: 'budget-overflow-error',
+          message: `Slot "${slot.name}" requires ${requestedTokens} tokens, which exceeds the limit of ${slotLimit} tokens. Compaction strategy is set to "error".`,
+          slot: slot.name
+        });
+        allocatedTokens = 0;
+        finalText = '';
+        status = 'omitted';
       } else {
-        // We need compaction
-        if (slot.compaction === 'error') {
+        // Dispatch to the registered compactor (built-in or custom).
+        const compactor = this.compactors[slot.compaction];
+        if (!compactor) {
           findings.push({
             severity: 'error',
-            rule: 'budget-overflow-error',
-            message: `Slot "${slot.name}" requires ${requestedTokens} tokens, which exceeds the limit of ${slotLimit} tokens. Compaction strategy is set to "error".`,
+            rule: 'unknown-compaction-strategy',
+            message: `No compactor registered for strategy "${slot.compaction}" on slot "${slot.name}".`,
             slot: slot.name
           });
           allocatedTokens = 0;
           finalText = '';
           status = 'omitted';
-        } else if (slot.compaction === 'truncate') {
-          // Truncate to the largest prefix that fits, using the active tokenizer.
-          finalText = truncateToTokens(rawText, slotLimit, this.tokenizer);
-          allocatedTokens = this.tokenizer.countTokens(finalText);
-          status = 'truncated';
-          findings.push({
-            severity: 'warning',
-            rule: 'budget-truncated',
-            message: `Slot "${slot.name}" truncated to fit allocated budget of ${slotLimit} tokens (originally ${requestedTokens} tokens).`,
-            slot: slot.name
+        } else {
+          const result = compactor(rawText, {
+            slot,
+            maxTokens: slotLimit,
+            tokenizer: this.tokenizer,
+            requestedTokens,
+            truncateToTokens
           });
-        } else if (slot.compaction === 'summarize') {
-          // Reserve room for the marker so the final text (content + marker)
-          // never exceeds the slot's token budget, under any tokenizer.
-          const marker = '\n\n[... Content truncated & summarized ...]';
-          const markerTokens = this.tokenizer.countTokens(marker);
-          const bodyBudget = Math.max(0, slotLimit - markerTokens);
-          const body = truncateToTokens(rawText, bodyBudget, this.tokenizer);
-          finalText = body + marker;
-          // Hard guarantee: if the marker alone overflows a tiny budget, clamp the whole.
-          if (this.tokenizer.countTokens(finalText) > slotLimit) {
-            finalText = truncateToTokens(finalText, slotLimit, this.tokenizer);
-          }
+          // Enforce the budget invariant regardless of what the compactor returned.
+          finalText = this.tokenizer.countTokens(result.text) > slotLimit
+            ? truncateToTokens(result.text, slotLimit, this.tokenizer)
+            : result.text;
           allocatedTokens = this.tokenizer.countTokens(finalText);
-          status = 'summarized';
-          findings.push({
-            severity: 'warning',
-            rule: 'budget-summarized',
-            message: `Slot "${slot.name}" compacted (summarized) to fit budget of ${slotLimit} tokens.`,
-            slot: slot.name
-          });
+          status = result.status ?? 'summarized';
+          if (result.findings) findings.push(...result.findings);
         }
       }
 

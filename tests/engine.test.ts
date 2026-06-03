@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { Engine, computeHash, truncateToTokens, heuristicTokenizer } from '../src/engine.js';
 import { diffContracts } from '../src/diff.js';
 import { gptTokenizer } from '../src/adapters/gpt-tokenizer.js';
-import { ContextContract, Tokenizer, RuleHandler } from '../src/types.js';
+import { ContextContract, Tokenizer, RuleHandler, Compactor } from '../src/types.js';
 
 describe('Hybrid Context Contract Engine', () => {
   const mockContract: ContextContract = {
@@ -396,6 +396,47 @@ describe('Custom rule handlers (extensibility)', () => {
     assert.ok(finding);
     assert.strictEqual(finding.severity, 'warning');
     assert.strictEqual(result.verdict.valid, true); // warning does not invalidate
+  });
+});
+
+describe('Pluggable compaction', () => {
+  const contract = (strategy: string): ContextContract => ({
+    version: '1.0.0',
+    name: 'compact-contract',
+    maxTotalTokens: 1000,
+    slots: [
+      { name: 'body', source: 'dynamic', priority: 0, required: true, compaction: strategy, format: 'text', immutable: false, maxTokens: 5 }
+    ],
+    rules: []
+  });
+
+  it('runs a custom compactor registered on the engine', () => {
+    const head: Compactor = (_text, { slot }) => ({
+      text: '[head-only]',
+      status: 'summarized',
+      findings: [{ severity: 'warning', rule: 'head-compactor', message: 'kept head only', slot: slot.name }]
+    });
+    const engine = new Engine(contract('head'), { compactors: { head } });
+    const result = engine.assemble({ body: 'this content is far too long for five tokens '.repeat(5) });
+    assert.strictEqual(result.metadata.slotUsage['body'].status, 'summarized');
+    assert.ok(result.content.includes('[head-only]'));
+    assert.ok(result.verdict.findings.some(f => f.rule === 'head-compactor'));
+  });
+
+  it('clamps a custom compactor that overshoots the budget', () => {
+    // A "bad" compactor that ignores the budget and returns huge text.
+    const passthrough: Compactor = (text) => ({ text, status: 'summarized' });
+    const engine = new Engine(contract('passthrough'), { compactors: { passthrough } });
+    const result = engine.assemble({ body: 'word '.repeat(200) }); // ~250 heuristic tokens, limit 5
+    const usage = result.metadata.slotUsage['body'];
+    assert.ok(usage.allocatedTokens <= 5, `engine must clamp to budget, got ${usage.allocatedTokens}`);
+  });
+
+  it('errors on an unknown compaction strategy with no compactor', () => {
+    const engine = new Engine(contract('nonexistent'));
+    const result = engine.assemble({ body: 'this content is far too long for five tokens '.repeat(5) });
+    assert.strictEqual(result.verdict.valid, false);
+    assert.ok(result.verdict.findings.some(f => f.rule === 'unknown-compaction-strategy'));
   });
 });
 

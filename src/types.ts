@@ -3,7 +3,8 @@ import { z } from 'zod';
 export const SlotSourceSchema = z.enum(['static', 'dynamic', 'state', 'environment']);
 export type SlotSource = z.infer<typeof SlotSourceSchema>;
 
-export const SlotCompactionSchema = z.enum(['truncate', 'summarize', 'error']);
+export const BUILTIN_COMPACTION_STRATEGIES = ['truncate', 'summarize', 'error'] as const;
+export const SlotCompactionSchema = z.enum(BUILTIN_COMPACTION_STRATEGIES);
 export type SlotCompaction = z.infer<typeof SlotCompactionSchema>;
 
 export const SlotFormatSchema = z.enum(['text', 'json', 'markdown']);
@@ -15,7 +16,8 @@ export const SlotDefinitionSchema = z.object({
   priority: z.number().int().nonnegative(), // 0 = highest priority, allocated first
   maxTokens: z.number().int().positive().optional(),
   immutable: z.boolean().optional().default(false),
-  compaction: SlotCompactionSchema.optional().default('error'),
+  // 'error', a built-in ('truncate'/'summarize'), or a custom strategy registered on the Engine.
+  compaction: z.string().optional().default('error'),
   format: SlotFormatSchema.optional().default('text'),
   required: z.boolean().optional().default(true),
   description: z.string().optional()
@@ -68,6 +70,37 @@ export interface Tokenizer {
    */
   truncateToTokens?(text: string, maxTokens: number): string;
 }
+
+/**
+ * Context passed to a compactor when a slot exceeds its token budget.
+ */
+export interface CompactionContext {
+  /** The slot being compacted. */
+  slot: SlotDefinition;
+  /** Token budget the result must fit within. */
+  maxTokens: number;
+  /** The active tokenizer (use it so the result respects the budget). */
+  tokenizer: Tokenizer;
+  /** Token count of the original (pre-compaction) text. */
+  requestedTokens: number;
+  /** Budget-safe truncation helper for any tokenizer. */
+  truncateToTokens: (text: string, maxTokens: number, tokenizer: Tokenizer) => string;
+}
+
+export interface CompactionResult {
+  /** The compacted text. The engine clamps it to maxTokens if a compactor overshoots. */
+  text: string;
+  /** Status reported in slot usage. Defaults to 'summarized' for custom compactors. */
+  status?: 'truncated' | 'summarized';
+  /** Findings to surface (e.g. a warning that content was dropped). */
+  findings?: ValidationFinding[];
+}
+
+/**
+ * A compaction strategy: produces a fitted version of an oversized slot.
+ * Register custom strategies via `new Engine(contract, { compactors })`.
+ */
+export type Compactor = (text: string, ctx: CompactionContext) => CompactionResult;
 
 export interface ValidationFinding {
   severity: 'error' | 'warning' | 'info';
