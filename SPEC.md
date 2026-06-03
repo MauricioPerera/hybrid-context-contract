@@ -139,6 +139,7 @@ Las reglas del contrato se ejecutan sobre los textos **ya asignados** (post-comp
   - sin `negate`: falla si **no** coincide (afirmar presencia obligatoria).
   - con `negate: true`: falla si **sí** coincide (prohibir patrón, p. ej. secretos/PII).
 - Patrón inválido: hallazgo `error` regla `invalid-regex-syntax`.
+- **Protección ReDoS:** antes de ejecutar, el patrón se analiza con una heurística (`isReDoSVulnerable`) que detecta cuantificadores anidados (star height ≥ 2, p. ej. `(a+)+`). Si se detecta, **no se ejecuta** y se emite `error` regla `unsafe-regex-pattern`. Además, el input se evalúa acotado a `maxInputLength` caracteres (por defecto 1.000.000) para acotar el peor caso. Es una heurística: cubre la clase dominante, no garantiza el 100%. Configurable/desactivable vía `createRegexRuleHandler({ rejectUnsafe, maxInputLength })`.
 
 ### 5.2 `schema`
 - Si el texto del slot está vacío (tras `trim`): se omite.

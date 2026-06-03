@@ -76,40 +76,108 @@ export function computeHash(text: string): string {
 // Engine to extend or override these.
 // ---------------------------------------------------------------------------
 
-const regexRuleHandler: RuleHandler = ({ rule, text }) => {
-  if (!rule.pattern) {
-    return [{
-      severity: 'warning',
-      rule: 'invalid-rule-config',
-      message: `Regex rule "${rule.name}" misses pattern configuration.`,
-      slot: rule.targetSlot
-    }];
+/**
+ * Heuristic detection of regex patterns prone to catastrophic backtracking (ReDoS).
+ * Targets the dominant cause: an unbounded quantifier applied to a group whose body
+ * itself contains an unbounded quantifier (star height >= 2), e.g. `(a+)+`, `(.*)*`,
+ * `([a-z]+)*`. This is a HEURISTIC: it catches the common cases but does not prove
+ * safety for every pattern (e.g. alternation-overlap ReDoS is not detected).
+ */
+export function isReDoSVulnerable(pattern: string): boolean {
+  const p = pattern.replace(/\\./g, ''); // drop escaped chars so `\(` `\+` don't confuse the scan
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] !== ')') continue;
+    const next = p[i + 1];
+    const quantified =
+      next === '*' || next === '+' || (next === '{' && /^\{\d*,\}/.test(p.slice(i + 1)));
+    if (!quantified) continue;
+    // Find the matching '(' for this ')'.
+    let depth = 1;
+    let j = i - 1;
+    for (; j >= 0; j--) {
+      if (p[j] === ')') depth++;
+      else if (p[j] === '(') { depth--; if (depth === 0) break; }
+    }
+    if (j < 0) continue;
+    const body = p.slice(j + 1, i);
+    // Body has its own unbounded/range quantifier? => nested quantifier => risky.
+    if (/[*+]/.test(body) || /\{\d*,\d*\}/.test(body)) return true;
   }
-  try {
-    // Strip the global flag: a stateful `lastIndex` would make repeated
-    // .test() calls non-deterministic, defeating the purpose of the check.
-    const safeFlags = (rule.flags || '').replace(/g/g, '');
-    const regex = new RegExp(rule.pattern, safeFlags);
-    const matches = regex.test(text);
-    const shouldTrigger = rule.negate ? matches : !matches;
-    if (shouldTrigger) {
+  return false;
+}
+
+/**
+ * Builds the built-in `regex` rule handler with ReDoS protection.
+ * - `rejectUnsafe` (default true): statically-detected catastrophic patterns are
+ *   refused (finding `unsafe-regex-pattern`) and never executed.
+ * - `maxInputLength` (default 1,000,000): the regex is evaluated on at most this
+ *   many characters, bounding worst-case runtime for patterns the heuristic misses.
+ */
+export function createRegexRuleHandler(
+  opts: { rejectUnsafe?: boolean; maxInputLength?: number } = {}
+): RuleHandler {
+  const rejectUnsafe = opts.rejectUnsafe ?? true;
+  const maxInputLength = opts.maxInputLength ?? 1_000_000;
+
+  return ({ rule, text }) => {
+    if (!rule.pattern) {
       return [{
-        severity: rule.severity,
-        rule: rule.name,
-        message: rule.message || `Regex verification failed for slot "${rule.targetSlot}" using pattern: ${rule.pattern}`,
+        severity: 'warning',
+        rule: 'invalid-rule-config',
+        message: `Regex rule "${rule.name}" misses pattern configuration.`,
         slot: rule.targetSlot
       }];
     }
-    return [];
-  } catch (e: any) {
-    return [{
-      severity: 'error',
-      rule: 'invalid-regex-syntax',
-      message: `Invalid regex pattern "${rule.pattern}" in rule "${rule.name}": ${e.message}`,
-      slot: rule.targetSlot
-    }];
-  }
-};
+    if (rejectUnsafe && isReDoSVulnerable(rule.pattern)) {
+      return [{
+        severity: 'error',
+        rule: 'unsafe-regex-pattern',
+        message: `Regex pattern in rule "${rule.name}" looks vulnerable to catastrophic backtracking (nested quantifiers) and was not executed. Simplify the pattern, or register a custom regex handler if you trust it.`,
+        slot: rule.targetSlot
+      }];
+    }
+
+    const findings: ValidationFinding[] = [];
+    let target = text;
+    if (target.length > maxInputLength) {
+      target = target.slice(0, maxInputLength);
+      findings.push({
+        severity: 'info',
+        rule: 'regex-input-bounded',
+        message: `Slot "${rule.targetSlot}" exceeded ${maxInputLength} chars; the regex was evaluated on a prefix to bound runtime.`,
+        slot: rule.targetSlot
+      });
+    }
+
+    try {
+      // Strip the global flag: a stateful `lastIndex` would make repeated
+      // .test() calls non-deterministic, defeating the purpose of the check.
+      const safeFlags = (rule.flags || '').replace(/g/g, '');
+      const regex = new RegExp(rule.pattern, safeFlags);
+      const matches = regex.test(target);
+      const shouldTrigger = rule.negate ? matches : !matches;
+      if (shouldTrigger) {
+        findings.push({
+          severity: rule.severity,
+          rule: rule.name,
+          message: rule.message || `Regex verification failed for slot "${rule.targetSlot}" using pattern: ${rule.pattern}`,
+          slot: rule.targetSlot
+        });
+      }
+      return findings;
+    } catch (e: any) {
+      findings.push({
+        severity: 'error',
+        rule: 'invalid-regex-syntax',
+        message: `Invalid regex pattern "${rule.pattern}" in rule "${rule.name}": ${e.message}`,
+        slot: rule.targetSlot
+      });
+      return findings;
+    }
+  };
+}
+
+const regexRuleHandler: RuleHandler = createRegexRuleHandler();
 
 const schemaRuleHandler: RuleHandler = ({ rule, text }) => {
   if (!text.trim()) return [];

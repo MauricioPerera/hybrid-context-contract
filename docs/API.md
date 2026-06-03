@@ -50,6 +50,12 @@ Solo la fase de validación, sobre textos ya asignados. Ver §5 de [SPEC.md](../
 ### `heuristicTokenizer: Tokenizer`
 Tokenizador por defecto del `Engine`, basado en `estimateTokens`.
 
+### `isReDoSVulnerable(pattern: string): boolean`
+Heurística que detecta patrones regex con cuantificadores anidados (riesgo de backtracking catastrófico). Cubre la clase dominante; no garantiza el 100%.
+
+### `createRegexRuleHandler(opts?): RuleHandler`
+Construye el handler `regex` built-in. `opts.rejectUnsafe` (def. `true`) rechaza patrones detectados como vulnerables sin ejecutarlos; `opts.maxInputLength` (def. `1_000_000`) acota los caracteres evaluados. Regístralo como `{ ruleHandlers: { regex: createRegexRuleHandler({ rejectUnsafe: false }) } }` para personalizar.
+
 ### `truncateToTokens(text, maxTokens, tokenizer): string`
 Prefijo más largo de `text` cuyo coste en tokens es `<= maxTokens`, para cualquier tokenizador (búsqueda binaria *surrogate-safe* si el tokenizador no aporta truncado nativo).
 

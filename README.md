@@ -212,7 +212,7 @@ Esta versión es funcional pero tiene atajos deliberados que conviene conocer an
 - **`compaction: "summarize"` (built-in) no resume**: trunca y añade un marcador. Pero la compactación es **enchufable**: inyecta un compactor propio (p. ej. un resumen real vía LLM) con `{ compactors }`. El motor recorta el resultado al presupuesto aunque el compactor se exceda.
 - **`type: "schema"` (built-in) es validación simplificada**: solo comprueba la presencia de claves de primer nivel listadas en `required`. Para JSON Schema **completo** (tipos, anidados, enums), registra el handler `json-schema` del adaptador `ajv` (`createAjvSchemaHandler()`), que coexiste con el built-in.
 - **Referencias `{slot}`**: solo se *detectan* las rotas (`broken-ref`); no hay interpolación/sustitución de referencias válidas.
-- **Reglas regex**: se ejecutan sobre contenido arbitrario sin protección contra ReDoS. Audita los patrones del contrato.
+- **Reglas regex / ReDoS**: los patrones se analizan con una heurística que detecta cuantificadores anidados (`(a+)+`, etc.) y los rechaza sin ejecutarlos (`unsafe-regex-pattern`); además el input se evalúa acotado en longitud. Es una heurística (cubre la clase dominante, no el 100%) y es configurable vía `createRegexRuleHandler`.
 
 Ver el detalle normativo de cada comportamiento en [SPEC.md](SPEC.md).
 

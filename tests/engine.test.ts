@@ -2,7 +2,7 @@ import test, { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { Engine, computeHash, truncateToTokens, heuristicTokenizer } from '../src/engine.js';
+import { Engine, computeHash, truncateToTokens, heuristicTokenizer, isReDoSVulnerable, createRegexRuleHandler } from '../src/engine.js';
 import { diffContracts } from '../src/diff.js';
 import { gptTokenizer } from '../src/adapters/gpt-tokenizer.js';
 import { createAjvSchemaHandler } from '../src/adapters/ajv-schema.js';
@@ -397,6 +397,47 @@ describe('Custom rule handlers (extensibility)', () => {
     assert.ok(finding);
     assert.strictEqual(finding.severity, 'warning');
     assert.strictEqual(result.verdict.valid, true); // warning does not invalidate
+  });
+});
+
+describe('ReDoS protection', () => {
+  it('detects nested-quantifier patterns as vulnerable', () => {
+    assert.strictEqual(isReDoSVulnerable('(a+)+'), true);
+    assert.strictEqual(isReDoSVulnerable('(.*)*'), true);
+    assert.strictEqual(isReDoSVulnerable('([a-z]+)*$'), true);
+  });
+
+  it('does not flag safe real-world patterns', () => {
+    assert.strictEqual(isReDoSVulnerable('a+'), false);
+    assert.strictEqual(isReDoSVulnerable('\\b\\d{3}-\\d{2}-\\d{4}\\b'), false);
+    assert.strictEqual(isReDoSVulnerable("(api_key|password)\\s*=\\s*['\"][a-zA-Z0-9]{16,}['\"]"), false);
+  });
+
+  it('refuses to execute a vulnerable pattern in a contract', () => {
+    const contract: ContextContract = {
+      version: '1.0.0',
+      name: 'redos-contract',
+      maxTotalTokens: 1000,
+      slots: [{ name: 'body', source: 'dynamic', priority: 0, required: true, compaction: 'truncate', format: 'text', immutable: false }],
+      rules: [{ name: 'evil', type: 'regex', targetSlot: 'body', pattern: '(a+)+$', severity: 'error' }]
+    };
+    const engine = new Engine(contract);
+    const result = engine.assemble({ body: 'aaaaaaaaaaaaaaaaaaaa!' });
+    assert.strictEqual(result.verdict.valid, false);
+    assert.ok(result.verdict.findings.some(f => f.rule === 'unsafe-regex-pattern'));
+  });
+
+  it('can opt out via a custom regex handler (rejectUnsafe: false)', () => {
+    const contract: ContextContract = {
+      version: '1.0.0',
+      name: 'redos-optout',
+      maxTotalTokens: 1000,
+      slots: [{ name: 'body', source: 'dynamic', priority: 0, required: true, compaction: 'truncate', format: 'text', immutable: false }],
+      rules: [{ name: 'evil', type: 'regex', targetSlot: 'body', pattern: '(a+)+$', negate: true, severity: 'error' }]
+    };
+    const engine = new Engine(contract, { ruleHandlers: { regex: createRegexRuleHandler({ rejectUnsafe: false }) } });
+    const result = engine.assemble({ body: 'short' }); // tiny input, no backtracking blowup
+    assert.ok(!result.verdict.findings.some(f => f.rule === 'unsafe-regex-pattern'));
   });
 });
 
