@@ -149,6 +149,8 @@ if (result.verdict.valid) {
 }
 ```
 
+Para un ejemplo end-to-end con un SDK de LLM real (contrato → tokenizador BPE real → gate → llamada a Anthropic, con dry-run si no hay API key), ver [example/llm-anthropic.ts](example/llm-anthropic.ts).
+
 ---
 
 ## 🔍 Reglas de Linter Soportadas
