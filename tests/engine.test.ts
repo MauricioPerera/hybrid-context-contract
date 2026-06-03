@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import { Engine, computeHash, truncateToTokens, heuristicTokenizer } from '../src/engine.js';
 import { diffContracts } from '../src/diff.js';
 import { gptTokenizer } from '../src/adapters/gpt-tokenizer.js';
+import { createAjvSchemaHandler } from '../src/adapters/ajv-schema.js';
 import { ContextContract, Tokenizer, RuleHandler, Compactor } from '../src/types.js';
 
 describe('Hybrid Context Contract Engine', () => {
@@ -396,6 +397,54 @@ describe('Custom rule handlers (extensibility)', () => {
     assert.ok(finding);
     assert.strictEqual(finding.severity, 'warning');
     assert.strictEqual(result.verdict.valid, true); // warning does not invalidate
+  });
+});
+
+describe('ajv-schema adapter (real JSON Schema)', () => {
+  const schema = JSON.stringify({
+    type: 'object',
+    required: ['user_role', 'limits'],
+    properties: {
+      user_role: { type: 'string', enum: ['admin', 'user'] },
+      limits: {
+        type: 'object',
+        required: ['max'],
+        properties: { max: { type: 'number' } }
+      }
+    }
+  });
+
+  const contract: ContextContract = {
+    version: '1.0.0',
+    name: 'ajv-contract',
+    maxTotalTokens: 1000,
+    slots: [
+      { name: 'config', source: 'environment', priority: 0, required: true, compaction: 'error', format: 'json', immutable: false }
+    ],
+    rules: [
+      { name: 'config-json-schema', type: 'json-schema', targetSlot: 'config', schemaJson: schema, severity: 'error' }
+    ]
+  };
+
+  const engine = new Engine(contract, { ruleHandlers: { 'json-schema': createAjvSchemaHandler() } });
+
+  it('passes a fully valid nested object', () => {
+    const result = engine.assemble({ config: '{"user_role":"admin","limits":{"max":5}}' });
+    assert.strictEqual(result.verdict.valid, true);
+  });
+
+  it('flags a wrong nested type (max must be number)', () => {
+    const result = engine.assemble({ config: '{"user_role":"admin","limits":{"max":"five"}}' });
+    assert.strictEqual(result.verdict.valid, false);
+    assert.ok(result.verdict.findings.some(f => f.rule === 'config-json-schema' && /max/.test(f.message)));
+  });
+
+  it('flags an enum violation and a missing required key', () => {
+    const result = engine.assemble({ config: '{"user_role":"root"}' });
+    assert.strictEqual(result.verdict.valid, false);
+    const msgs = result.verdict.findings.filter(f => f.rule === 'config-json-schema').map(f => f.message).join(' | ');
+    assert.ok(/user_role|enum/.test(msgs));
+    assert.ok(/limits/.test(msgs));
   });
 });
 

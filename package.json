@@ -13,6 +13,10 @@
     "./adapters/gpt-tokenizer": {
       "types": "./dist/src/adapters/gpt-tokenizer.d.ts",
       "import": "./dist/src/adapters/gpt-tokenizer.js"
+    },
+    "./adapters/ajv-schema": {
+      "types": "./dist/src/adapters/ajv-schema.d.ts",
+      "import": "./dist/src/adapters/ajv-schema.js"
     }
   },
   "bin": {
@@ -60,6 +64,7 @@
     "typescript": "^5.5.4"
   },
   "optionalDependencies": {
+    "ajv": "^8.20.0",
     "gpt-tokenizer": "^3.4.0"
   }
 }

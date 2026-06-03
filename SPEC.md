@@ -145,6 +145,7 @@ Las reglas del contrato se ejecutan sobre los textos **ya asignados** (post-comp
 - Se hace `JSON.parse`. Si falla: hallazgo `error` regla `<name>-invalid-json`.
 - Si hay `schemaJson` con `required: string[]`: por cada clave ausente en el objeto, hallazgo con `severity` de la regla y regla `<name>`.
 - Es una validación **simplificada**: solo comprueba presencia de claves de primer nivel listadas en `required`. No valida tipos ni estructuras anidadas.
+- Para validación **completa** (tipos, anidados, enums, formatos), usa el adaptador opcional `ajv` registrando un handler `json-schema` (`createAjvSchemaHandler()` en `hybrid-context-contract/adapters/ajv-schema`, requiere la dependencia opcional `ajv`). Coexiste con el `schema` built-in.
 
 ### 5.3 `immutable-hash`
 - Si el texto está vacío (tras `trim`): se omite.

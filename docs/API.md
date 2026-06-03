@@ -115,6 +115,14 @@ interface CompactionResult {
 ```
 Built-ins exportados como `builtinCompactors: Record<string, Compactor>` (`truncate`, `summarize`). Se seleccionan por `slot.compaction`; `error` es especial (falla, no compacta). Una estrategia sin compactor produce un hallazgo `error` (`unknown-compaction-strategy`).
 
+### Adaptador: `createAjvSchemaHandler` — `hybrid-context-contract/adapters/ajv-schema`
+Handler de regla con JSON Schema completo (Ajv, draft-07+), vía la dependencia opcional `ajv`. Regístralo como tipo de regla (recomendado `json-schema`, para coexistir con el `schema` built-in):
+```ts
+import { createAjvSchemaHandler } from 'hybrid-context-contract/adapters/ajv-schema';
+const engine = new Engine(contract, { ruleHandlers: { 'json-schema': createAjvSchemaHandler() } });
+```
+El `schemaJson` de la regla contiene el esquema (string JSON); se valida contra el contenido parseado del `targetSlot`. Los validadores se cachean por esquema.
+
 ### `ContextContract`
 ```ts
 {
