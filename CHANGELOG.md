@@ -33,4 +33,4 @@ Primer release. Framework para definir, mezclar y validar **Contratos de Context
 - La mitigación ReDoS es heurística (cubre la clase dominante, no garantiza el 100%).
 - Las referencias `{slot}` se detectan pero no se interpolan.
 
-[1.0.0]: https://github.com/mauricioperera/hybrid-context-contract/releases/tag/v1.0.0
+[1.0.0]: https://github.com/MauricioPerera/hybrid-context-contract/releases/tag/v1.0.0
