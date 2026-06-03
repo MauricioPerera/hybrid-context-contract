@@ -81,6 +81,14 @@ function div(cls: string, text?: string): HTMLDivElement {
 }
 
 // --- State -----------------------------------------------------------------
+interface UIState {
+  contract: string;
+  inputs: Record<string, string>;
+  tokenizer: string;
+  interpolate: boolean;
+  budget: number | null; // null = follow the contract's maxTotalTokens
+}
+
 const inputState: Record<string, string> = { ...DEFAULT_INPUTS };
 let renderedSlots: string[] = [];
 let budgetTouched = false;
@@ -90,6 +98,53 @@ const tokenizerEl = $<HTMLSelectElement>('tokenizer');
 const interpolateEl = $<HTMLInputElement>('interpolate');
 const budgetEl = $<HTMLInputElement>('budget');
 const inputsEl = $('inputs');
+
+const LS_KEY = 'hcc-playground-state';
+
+function getState(): UIState {
+  return {
+    contract: contractEl.value,
+    inputs: { ...inputState },
+    tokenizer: tokenizerEl.value,
+    interpolate: interpolateEl.checked,
+    budget: budgetTouched ? Number(budgetEl.value) : null
+  };
+}
+
+function applyState(s: UIState) {
+  contractEl.value = s.contract;
+  for (const k of Object.keys(inputState)) delete inputState[k];
+  Object.assign(inputState, s.inputs || {});
+  tokenizerEl.value = s.tokenizer || 'heuristic';
+  interpolateEl.checked = !!s.interpolate;
+  if (typeof s.budget === 'number') { budgetTouched = true; budgetEl.value = String(s.budget); }
+  else { budgetTouched = false; }
+  renderedSlots = []; // force input fields to rebuild with new values
+  run();
+}
+
+function encodeState(s: UIState): string {
+  return btoa(encodeURIComponent(JSON.stringify(s)));
+}
+function decodeState(str: string): UIState | null {
+  try { return JSON.parse(decodeURIComponent(atob(str))) as UIState; } catch { return null; }
+}
+function saveLocal() {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(getState())); } catch { /* ignore */ }
+}
+function loadLocal(): UIState | null {
+  try { const v = localStorage.getItem(LS_KEY); return v ? JSON.parse(v) as UIState : null; } catch { return null; }
+}
+
+let toastTimer: number | undefined;
+function toast(msg: string) {
+  let t = document.getElementById('toast');
+  if (!t) { t = div('toast'); t.id = 'toast'; document.body.appendChild(t); }
+  t.textContent = msg;
+  t.classList.add('show');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = window.setTimeout(() => t!.classList.remove('show'), 1800);
+}
 
 // --- Core ------------------------------------------------------------------
 function parseContract(): { contract?: ContextContract; error?: string } {
@@ -139,6 +194,7 @@ function statusBadge(status: string): HTMLElement {
 }
 
 async function run() {
+  saveLocal();
   const { contract, error } = parseContract();
   const statusPill = $('contract-status');
 
@@ -231,11 +287,69 @@ function renderResults(result: ReturnType<Engine['assemble']>, budget: number) {
   $('payload').textContent = result.content || '(vacío)';
 }
 
+// --- Presets ---------------------------------------------------------------
+const LONG_DIFF = 'diff --git a/big.js b/big.js\n' +
+  '+ const line = "lorem ipsum dolor sit amet consectetur adipiscing";\n'.repeat(40);
+
+const PRESETS: { label: string; state: UIState }[] = [
+  {
+    label: '✅ PR válido',
+    state: { contract: DEFAULT_CONTRACT, inputs: { ...DEFAULT_INPUTS }, tokenizer: 'heuristic', interpolate: false, budget: null }
+  },
+  {
+    label: '🔑 Fuga de secreto',
+    state: {
+      contract: DEFAULT_CONTRACT,
+      inputs: { ...DEFAULT_INPUTS, changed_code: '+ const client_secret = "FAKEDEMO_not_a_real_secret_000000";' },
+      tokenizer: 'heuristic', interpolate: false, budget: null
+    }
+  },
+  {
+    label: '✂️ Compactación',
+    state: {
+      contract: DEFAULT_CONTRACT,
+      inputs: { ...DEFAULT_INPUTS, changed_code: LONG_DIFF },
+      tokenizer: 'heuristic', interpolate: false, budget: 150
+    }
+  },
+  {
+    label: '🔗 Interpolación',
+    state: {
+      contract: DEFAULT_CONTRACT,
+      inputs: { ...DEFAULT_INPUTS, user_message: 'Aplica {guidelines} y respeta {system}. (referencia rota: {nope})' },
+      tokenizer: 'heuristic', interpolate: true, budget: null
+    }
+  }
+];
+
+const presetsEl = $('presets');
+for (const p of PRESETS) {
+  const b = document.createElement('button');
+  b.className = 'preset-btn';
+  b.textContent = p.label;
+  b.addEventListener('click', () => { applyState(structuredClone(p.state)); toast('Preset: ' + p.label); });
+  presetsEl.appendChild(b);
+}
+
 // --- Wire up ---------------------------------------------------------------
-contractEl.value = DEFAULT_CONTRACT;
 contractEl.addEventListener('input', () => { budgetTouched = false; run(); });
 tokenizerEl.addEventListener('change', run);
 interpolateEl.addEventListener('change', run);
 budgetEl.addEventListener('input', () => { budgetTouched = true; run(); });
 
-run();
+$('share').addEventListener('click', async () => {
+  location.hash = encodeState(getState());
+  try { await navigator.clipboard.writeText(location.href); toast('Enlace copiado al portapapeles'); }
+  catch { toast('Enlace generado en la URL'); }
+});
+$('copy-payload').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('payload').textContent || ''); toast('Payload copiado'); }
+  catch { toast('No se pudo copiar'); }
+});
+
+// Startup load precedence: URL hash > localStorage > default.
+const fromHash = location.hash.length > 1 ? decodeState(location.hash.slice(1)) : null;
+const initial: UIState = fromHash ?? loadLocal() ?? {
+  contract: DEFAULT_CONTRACT, inputs: { ...DEFAULT_INPUTS }, tokenizer: 'heuristic', interpolate: false, budget: null
+};
+applyState(initial);

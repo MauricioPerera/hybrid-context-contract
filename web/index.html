@@ -14,7 +14,10 @@
           <p class="tagline">Playground del harness de contexto — el motor corre en tu navegador</p>
         </div>
       </div>
-      <a class="repo" href="https://github.com/MauricioPerera/hybrid-context-contract" target="_blank" rel="noreferrer">GitHub ↗</a>
+      <div class="topbar-actions">
+        <button id="share" class="btn-mini" title="Copiar un enlace con este estado">🔗 Compartir</button>
+        <a class="repo" href="https://github.com/MauricioPerera/hybrid-context-contract" target="_blank" rel="noreferrer">GitHub ↗</a>
+      </div>
     </header>
 
     <main class="grid">
@@ -24,6 +27,7 @@
           <h2>Contrato</h2>
           <span id="contract-status" class="status-pill"></span>
         </div>
+        <div class="presets" id="presets"></div>
         <textarea id="contract" spellcheck="false" class="code"></textarea>
 
         <div class="controls">
@@ -68,7 +72,10 @@
         <h3>Hallazgos</h3>
         <div id="findings" class="findings"></div>
 
-        <h3>Payload ensamblado</h3>
+        <div class="row-between">
+          <h3>Payload ensamblado</h3>
+          <button id="copy-payload" class="btn-mini">Copiar</button>
+        </div>
         <pre id="payload" class="payload"></pre>
       </section>
     </main>
