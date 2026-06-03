@@ -11,6 +11,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado
 - **Playground web** (`web/`): dashboard estático (Vite + TS) que ejecuta el motor en el navegador — editor de contrato e inputs, presupuesto con slider, selector de tokenizador (heurístico / GPT real bajo demanda), toggle de interpolación, linter y payload en vivo. Job de CI que verifica su build.
 - **Demo desplegada** en GitHub Pages: <https://mauricioperera.github.io/hybrid-context-contract/> (workflow de deploy automático en cada push a `main`).
 - **Playground — pulido de UX**: presets de escenarios (PR válido, fuga de secreto, compactación, interpolación), persistencia en `localStorage`, enlace compartible (estado codificado en la URL) y botón de copiar payload.
+- **Playground — visor de diff**: pestaña para comparar dos contratos (base/nuevo) y ver cambios por campo (from→to) y regresiones resaltadas, usando el mismo `diffContracts` del motor.
 
 ## [1.0.0] - 2026-06-03
 

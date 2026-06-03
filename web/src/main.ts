@@ -1,6 +1,6 @@
 import './style.css';
 import yaml from 'js-yaml';
-import { Engine, ContextContractSchema } from '../../dist/src/index.js';
+import { Engine, ContextContractSchema, diffContracts } from '../../dist/src/index.js';
 import type { ContextContract, Tokenizer } from '../../dist/src/index.js';
 
 // gpt-tokenizer ships the full BPE vocabulary (~2 MB), so load it only on demand.
@@ -147,10 +147,10 @@ function toast(msg: string) {
 }
 
 // --- Core ------------------------------------------------------------------
-function parseContract(): { contract?: ContextContract; error?: string } {
+function parseContractText(text: string): { contract?: ContextContract; error?: string } {
   let raw: unknown;
   try {
-    raw = yaml.load(contractEl.value);
+    raw = yaml.load(text);
   } catch (e: any) {
     return { error: 'YAML inválido: ' + e.message };
   }
@@ -161,6 +161,8 @@ function parseContract(): { contract?: ContextContract; error?: string } {
   }
   return { contract: parsed.data as ContextContract };
 }
+
+function parseContract() { return parseContractText(contractEl.value); }
 
 function renderInputs(contract: ContextContract) {
   const slots = contract.slots.map(s => s.name);
@@ -287,6 +289,87 @@ function renderResults(result: ReturnType<Engine['assemble']>, budget: number) {
   $('payload').textContent = result.content || '(vacío)';
 }
 
+// --- Diff view -------------------------------------------------------------
+const diffOldEl = $<HTMLTextAreaElement>('diff-old');
+const diffNewEl = $<HTMLTextAreaElement>('diff-new');
+
+function changeRow(label: string, from: unknown, to: unknown): HTMLElement {
+  const r = div('change-row');
+  r.appendChild(div('change-key', label));
+  r.appendChild(div('change-from', String(from)));
+  r.appendChild(div('change-arrow', '→'));
+  r.appendChild(div('change-to', String(to)));
+  return r;
+}
+
+function renderDiff() {
+  const result = $('diff-result');
+  const status = $('diff-status');
+  clear(result);
+
+  const o = parseContractText(diffOldEl.value);
+  const n = parseContractText(diffNewEl.value);
+  if (o.error || n.error || !o.contract || !n.contract) {
+    status.textContent = '✕ inválido';
+    status.className = 'status-pill bad';
+    result.appendChild(div('finding error', o.error || n.error || 'Contrato inválido'));
+    return;
+  }
+
+  const d = diffContracts(o.contract, n.contract);
+
+  // Regressions first — the headline signal.
+  if (d.regressions.length) {
+    status.textContent = `⚠ ${d.regressions.length} regresión(es)`;
+    status.className = 'status-pill bad';
+    const sec = div('diff-section');
+    sec.appendChild(div('diff-h', '⚠️ Regresiones'));
+    for (const r of d.regressions) sec.appendChild(div('finding error', r));
+    result.appendChild(sec);
+  } else {
+    status.textContent = '✓ sin regresiones';
+    status.className = 'status-pill ok';
+    result.appendChild(div('finding ok', '✓ Sin regresiones detectadas.'));
+  }
+
+  const metaKeys = Object.keys(d.metadata);
+  if (metaKeys.length) {
+    const sec = div('diff-section');
+    sec.appendChild(div('diff-h', 'Metadata'));
+    for (const k of metaKeys) {
+      const c = (d.metadata as Record<string, { from?: unknown; to?: unknown }>)[k];
+      sec.appendChild(changeRow(k, c.from, c.to));
+    }
+    result.appendChild(sec);
+  }
+
+  if (d.slots.length) {
+    const sec = div('diff-section');
+    sec.appendChild(div('diff-h', 'Slots'));
+    for (const s of d.slots) {
+      const item = div('diff-item');
+      item.appendChild(div('diff-tag tag-' + s.type, s.type));
+      item.appendChild(div('diff-name', s.name));
+      sec.appendChild(item);
+      if (s.changes) for (const [k, v] of Object.entries(s.changes)) sec.appendChild(changeRow('· ' + k, v.from, v.to));
+    }
+    result.appendChild(sec);
+  }
+
+  if (d.rules.length) {
+    const sec = div('diff-section');
+    sec.appendChild(div('diff-h', 'Reglas'));
+    for (const r of d.rules) {
+      const item = div('diff-item');
+      item.appendChild(div('diff-tag tag-' + r.type, r.type));
+      item.appendChild(div('diff-name', r.name));
+      sec.appendChild(item);
+      if (r.changes) for (const [k, v] of Object.entries(r.changes)) sec.appendChild(changeRow('· ' + k, v.from, v.to));
+    }
+    result.appendChild(sec);
+  }
+}
+
 // --- Presets ---------------------------------------------------------------
 const LONG_DIFF = 'diff --git a/big.js b/big.js\n' +
   '+ const line = "lorem ipsum dolor sit amet consectetur adipiscing";\n'.repeat(40);
@@ -346,6 +429,28 @@ $('copy-payload').addEventListener('click', async () => {
   try { await navigator.clipboard.writeText($('payload').textContent || ''); toast('Payload copiado'); }
   catch { toast('No se pudo copiar'); }
 });
+
+// Diff tab: prefill with a v2 that weakens the contract (instant regressions).
+const DEFAULT_CONTRACT_V2 = DEFAULT_CONTRACT
+  .replace('maxTotalTokens: 600', 'maxTotalTokens: 400')
+  .replace('immutable: true', 'immutable: false');
+diffOldEl.value = DEFAULT_CONTRACT;
+diffNewEl.value = DEFAULT_CONTRACT_V2;
+diffOldEl.addEventListener('input', renderDiff);
+diffNewEl.addEventListener('input', renderDiff);
+
+// Tabs
+const tabs = Array.from(document.querySelectorAll<HTMLButtonElement>('.tab'));
+let diffRendered = false;
+for (const t of tabs) {
+  t.addEventListener('click', () => {
+    tabs.forEach(x => x.classList.toggle('active', x === t));
+    const tab = t.dataset.tab;
+    $('view-play').hidden = tab !== 'play';
+    $('view-diff').hidden = tab !== 'diff';
+    if (tab === 'diff' && !diffRendered) { renderDiff(); diffRendered = true; }
+  });
+}
 
 // Startup load precedence: URL hash > localStorage > default.
 const fromHash = location.hash.length > 1 ? decodeState(location.hash.slice(1)) : null;

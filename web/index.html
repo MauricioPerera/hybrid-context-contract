@@ -20,7 +20,12 @@
       </div>
     </header>
 
-    <main class="grid">
+    <nav class="tabs">
+      <button class="tab active" data-tab="play">▶ Playground</button>
+      <button class="tab" data-tab="diff">⇄ Diff de contratos</button>
+    </nav>
+
+    <main class="grid" id="view-play">
       <!-- Left: editor -->
       <section class="panel">
         <div class="panel-head">
@@ -77,6 +82,22 @@
           <button id="copy-payload" class="btn-mini">Copiar</button>
         </div>
         <pre id="payload" class="payload"></pre>
+      </section>
+    </main>
+
+    <main class="grid" id="view-diff" hidden>
+      <section class="panel">
+        <div class="panel-head"><h2>Contrato base (old)</h2></div>
+        <textarea id="diff-old" class="code" spellcheck="false"></textarea>
+        <div class="panel-head"><h2>Contrato nuevo (new)</h2></div>
+        <textarea id="diff-new" class="code" spellcheck="false"></textarea>
+      </section>
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Resultado del diff</h2>
+          <span id="diff-status" class="status-pill"></span>
+        </div>
+        <div id="diff-result"></div>
       </section>
     </main>
 
