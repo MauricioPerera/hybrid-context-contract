@@ -1,7 +1,7 @@
 {
   "name": "hybrid-context-contract",
   "version": "1.0.0",
-  "description": "Niche-agnostic framework for defining, mixing, and validating hybrid context contracts with deterministic validation for LLMs and agent systems",
+  "description": "A deterministic context harness for LLMs and agents: define, assemble, budget, and validate hybrid context contracts so the model is the only non-deterministic part.",
   "type": "module",
   "main": "dist/src/index.js",
   "types": "dist/src/index.d.ts",
@@ -25,6 +25,7 @@
   "files": [
     "dist/src",
     "SPEC.md",
+    "HARNESS.md",
     "docs",
     "CHANGELOG.md"
   ],
@@ -40,6 +41,8 @@
     "prepublishOnly": "npm test"
   },
   "keywords": [
+    "harness",
+    "context-harness",
     "llm",
     "context",
     "prompt",
