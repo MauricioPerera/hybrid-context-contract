@@ -4,7 +4,7 @@ Este proyecto implementa un framework agnóstico para definir, mezclar y validar
 
 El objetivo principal es tratar el contexto enviado a un modelo probabilístico (como un LLM) como un artefacto estructurado, versionado y validado en tiempo de compilación/ejecución, asegurando que la única parte no-determinista del sistema sea la inferencia interna del modelo.
 
-> 📑 **Documentación:** [Especificación normativa (`SPEC.md`)](SPEC.md) · [Referencia de la API (`docs/API.md`)](docs/API.md) · [Changelog](CHANGELOG.md)
+> 📑 **Documentación:** [Especificación normativa (`SPEC.md`)](SPEC.md) · [Referencia de la API (`docs/API.md`)](docs/API.md) · [Changelog](CHANGELOG.md) · [Contribuir](CONTRIBUTING.md)
 
 ---
 
