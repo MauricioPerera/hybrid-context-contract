@@ -33,7 +33,7 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "tsc && node --test dist/tests/**/*.test.js",
+    "test": "tsc && node --test dist/tests/*.test.js",
     "lint": "tsc && node dist/src/cli.js lint",
     "cli": "tsc && node dist/src/cli.js",
     "demo": "tsc -p example/tsconfig.json && node dist/example/run-demos.js",
