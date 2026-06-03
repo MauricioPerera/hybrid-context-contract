@@ -67,15 +67,22 @@ Un contrato que no satisface el esquema **DEBE** ser rechazado (la CLI termina c
 
 ---
 
-## 3. Estimación de tokens
+## 3. Tokenización (enchufable)
 
-El motor estima tokens con la aproximación estándar **1 token ≈ 4 caracteres**:
+El conteo de tokens es **inyectable**. El motor depende solo de la interfaz `Tokenizer`, nunca de un tokenizador concreto:
 
+```ts
+interface Tokenizer {
+  countTokens(text: string): number;
+  truncateToTokens?(text: string, maxTokens: number): string; // opcional
+}
+const engine = new Engine(contract, { tokenizer });  // por defecto: heurístico
 ```
-estimateTokens(text) = text === '' ? 0 : ceil(text.length / 4)
-```
 
-Esta aproximación es **determinista** pero **no exacta** respecto al tokenizador real del modelo. Los presupuestos **DEBERÍAN** fijarse con margen.
+- **Por defecto (`heuristicTokenizer`)**: aproximación `1 token ≈ 4 caracteres`, `estimateTokens(t) = t === '' ? 0 : ceil(t.length / 4)`. Es **determinista** pero **no exacta** respecto al tokenizador real del modelo.
+- **Adaptador real**: `gptTokenizer` (en `hybrid-context-contract/adapters/gpt-tokenizer`, requiere la dependencia opcional `gpt-tokenizer`) cuenta tokens BPE reales (cl100k_base). Vía CLI: `--tokenizer gpt`.
+
+**Invariante de truncado:** `truncateToTokens(text, max, tokenizer)` devuelve el prefijo más largo cuyo coste en tokens es `<= max`, para **cualquier** tokenizador — usa `tokenizer.truncateToTokens` si existe, o una búsqueda binaria *surrogate-safe* sobre `countTokens`. Esto hace que el presupuesto (§4) se respete con el tokenizador que sea, no solo con la heurística.
 
 ---
 
@@ -94,11 +101,11 @@ Para cada slot, con `raw = inputs[slot.name] || ''`:
 4. **Cabe** (`requestedTokens <= slotLimit`): se asigna el texto íntegro; estado `ok`.
 5. **No cabe** — se aplica `compaction`:
    - `error`: hallazgo `error` regla `budget-overflow-error`; texto vacío; estado `omitted`; `allocatedTokens = 0`.
-   - `truncate`: corta a `slotLimit * 4` caracteres; estado `truncated`; hallazgo `warning` regla `budget-truncated`; `allocatedTokens = slotLimit`.
-   - `summarize`: reserva espacio para el marcador `\n\n[... Content truncated & summarized ...]`, corta a `slotLimit*4 - marker.length` caracteres, concatena el marcador y recorta el resultado a `slotLimit*4` caracteres como tope duro; estado `summarized`; hallazgo `warning` regla `budget-summarized`; `allocatedTokens = estimateTokens(textoFinal)`.
+   - `truncate`: `finalText = truncateToTokens(raw, slotLimit, tokenizer)`; estado `truncated`; hallazgo `warning` regla `budget-truncated`; `allocatedTokens = countTokens(finalText)`.
+   - `summarize`: reserva el coste en tokens del marcador `\n\n[... Content truncated & summarized ...]`, trunca el cuerpo a `slotLimit - markerTokens`, concatena el marcador y, si aún excede, vuelve a truncar el conjunto a `slotLimit` como tope duro; estado `summarized`; hallazgo `warning` regla `budget-summarized`; `allocatedTokens = countTokens(finalText)`.
 6. Tras asignar: `remainingTotalTokens -= allocatedTokens`.
 
-**Invariante de presupuesto:** ningún slot **DEBE** producir un texto cuyo coste en tokens supere su `slotLimit`. (Esto incluye `summarize`, que recorta el resultado final con el marcador incluido.)
+**Invariante de presupuesto:** ningún slot **DEBE** producir un texto cuyo coste en tokens (medido con el tokenizador activo) supere su `slotLimit`. (Esto incluye `summarize`, que recorta el resultado final con el marcador incluido.)
 
 **Nota de orden vs. salida:** la asignación ocurre en orden de prioridad, pero el ensamblado (§6) emite los slots en el **orden de definición** del contrato.
 

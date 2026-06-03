@@ -4,7 +4,26 @@ import path from 'path';
 import yaml from 'js-yaml';
 import { Engine } from './engine.js';
 import { diffContracts, formatDiffMarkdown } from './diff.js';
-import { ContextContractSchema, ContextContract } from './types.js';
+import { ContextContractSchema, ContextContract, Tokenizer } from './types.js';
+
+/**
+ * Resolves the tokenizer named on the CLI. `heuristic` (or unset) uses the engine
+ * default; `gpt` lazily loads the optional gpt-tokenizer adapter.
+ */
+async function resolveTokenizer(name?: string): Promise<Tokenizer | undefined> {
+  if (!name || name === 'heuristic') return undefined; // engine default
+  if (name === 'gpt') {
+    try {
+      const mod = await import('./adapters/gpt-tokenizer.js');
+      return mod.gptTokenizer;
+    } catch {
+      console.error(`Error: --tokenizer gpt requires the optional dependency 'gpt-tokenizer'. Install it with: npm i gpt-tokenizer`);
+      process.exit(1);
+    }
+  }
+  console.error(`Error: unknown tokenizer "${name}". Valid values: 'heuristic' (default) or 'gpt'.`);
+  process.exit(1);
+}
 
 function printHelp() {
   console.log(`
@@ -16,6 +35,7 @@ Commands:
                 --contract <path>     Path to contract file (YAML or JSON)
                 --inputs <dir>        Directory containing input files (named by slot, e.g. system.txt)
                 --hashes <path>       (Optional) Path to JSON file containing expected SHA-256 hashes
+                --tokenizer <name>    (Optional) 'heuristic' (default) or 'gpt' (real OpenAI BPE counts)
 
   assemble    Mixes inputs, applies budgets, runs checks, and writes final payload.
               Options:
@@ -23,6 +43,7 @@ Commands:
                 --inputs <dir>        Directory containing input files
                 --output <path>       Path to save the assembled output text file
                 --hashes <path>       (Optional) Path to JSON file containing expected SHA-256 hashes
+                --tokenizer <name>    (Optional) 'heuristic' (default) or 'gpt' (real OpenAI BPE counts)
 
   diff        Compares two contract definitions and reports modifications and regressions.
               Options:
@@ -105,7 +126,7 @@ function readExpectedHashes(filePath?: string): Record<string, string> | undefin
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
 }
 
-function main() {
+async function main() {
   const args = process.argv.slice(2);
   const command = args[0];
   const options = parseArgs(args.slice(1));
@@ -130,8 +151,9 @@ function main() {
       const contract = readContract(contractPath);
       const inputs = readInputsDir(inputsDir);
       const hashes = readExpectedHashes(hashesPath);
+      const tokenizer = await resolveTokenizer(options.tokenizer);
 
-      const engine = new Engine(contract);
+      const engine = new Engine(contract, { tokenizer });
       // Run dry assemble to capture all allocation and linter warnings/errors
       const result = engine.assemble(inputs, hashes);
 
@@ -164,8 +186,9 @@ function main() {
       const contract = readContract(contractPath);
       const inputs = readInputsDir(inputsDir);
       const hashes = readExpectedHashes(hashesPath);
+      const tokenizer = await resolveTokenizer(options.tokenizer);
 
-      const engine = new Engine(contract);
+      const engine = new Engine(contract, { tokenizer });
       const result = engine.assemble(inputs, hashes);
 
       console.log(`\n=== Assembly Summary ===`);
@@ -237,4 +260,7 @@ function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

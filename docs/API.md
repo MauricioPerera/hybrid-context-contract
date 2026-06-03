@@ -11,10 +11,12 @@ import { Engine, computeHash, estimateTokens, diffContracts, formatDiffMarkdown,
 
 ## `class Engine`
 
-Motor de ensamblado y validación. Se construye con un contrato ya validado.
+Motor de ensamblado y validación. Se construye con un contrato ya validado y, opcionalmente, un tokenizador.
 
 ```ts
-const engine = new Engine(contract /* : ContextContract */);
+const engine = new Engine(contract /* : ContextContract */, {
+  tokenizer /* ?: Tokenizer — por defecto, heurístico 4 chars/token */
+});
 ```
 
 ### `engine.assemble(inputs, expectedHashes?) → AssembledPayload`
@@ -43,6 +45,19 @@ Solo la fase de validación, sobre textos ya asignados. Ver §5 de [SPEC.md](../
 ### `estimateTokens(text: string): number`
 `text === '' ? 0 : Math.ceil(text.length / 4)`. Aproximación 1 token ≈ 4 caracteres.
 
+### `heuristicTokenizer: Tokenizer`
+Tokenizador por defecto del `Engine`, basado en `estimateTokens`.
+
+### `truncateToTokens(text, maxTokens, tokenizer): string`
+Prefijo más largo de `text` cuyo coste en tokens es `<= maxTokens`, para cualquier tokenizador (búsqueda binaria *surrogate-safe* si el tokenizador no aporta truncado nativo).
+
+### Adaptador: `gptTokenizer` — `hybrid-context-contract/adapters/gpt-tokenizer`
+Tokenizador BPE real (OpenAI cl100k_base) vía la dependencia opcional `gpt-tokenizer`:
+```ts
+import { gptTokenizer } from 'hybrid-context-contract/adapters/gpt-tokenizer';
+const engine = new Engine(contract, { tokenizer: gptTokenizer });
+```
+
 ### `computeHash(text: string): string`
 SHA-256 hex del texto en UTF-8.
 
@@ -55,6 +70,14 @@ Renderiza un `ContractDiffResult` como Markdown legible.
 ---
 
 ## Tipos principales
+
+### `Tokenizer`
+```ts
+{
+  countTokens(text: string): number;
+  truncateToTokens?(text: string, maxTokens: number): string;  // opcional
+}
+```
 
 ### `ContextContract`
 ```ts

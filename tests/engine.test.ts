@@ -2,9 +2,10 @@ import test, { describe, it } from 'node:test';
 import assert from 'node:assert';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
-import { Engine, computeHash } from '../src/engine.js';
+import { Engine, computeHash, truncateToTokens, heuristicTokenizer } from '../src/engine.js';
 import { diffContracts } from '../src/diff.js';
-import { ContextContract } from '../src/types.js';
+import { gptTokenizer } from '../src/adapters/gpt-tokenizer.js';
+import { ContextContract, Tokenizer } from '../src/types.js';
 
 describe('Hybrid Context Contract Engine', () => {
   const mockContract: ContextContract = {
@@ -353,6 +354,78 @@ describe('Schema and immutable-hash rules', () => {
     assert.ok(finding);
     assert.strictEqual(finding.severity, 'error');
     assert.strictEqual(result.verdict.valid, false);
+  });
+});
+
+describe('Pluggable tokenizer', () => {
+  // Deterministic word-counting tokenizer, deliberately different from the heuristic.
+  const wordTokenizer: Tokenizer = {
+    countTokens: (t) => (t.trim() === '' ? 0 : t.trim().split(/\s+/).length)
+  };
+
+  const contract: ContextContract = {
+    version: '1.0.0',
+    name: 'tok-contract',
+    maxTotalTokens: 1000,
+    slots: [
+      { name: 'body', source: 'dynamic', priority: 0, required: true, compaction: 'truncate', format: 'text', immutable: false, maxTokens: 3 }
+    ],
+    rules: []
+  };
+
+  it('uses the injected tokenizer for budgeting (word counts, not chars)', () => {
+    const engine = new Engine(contract, { tokenizer: wordTokenizer });
+    const result = engine.assemble({ body: 'one two three four five six' }); // 6 words, limit 3
+    const usage = result.metadata.slotUsage['body'];
+    assert.strictEqual(usage.requestedTokens, 6);
+    assert.strictEqual(usage.status, 'truncated');
+    assert.ok(usage.allocatedTokens <= 3);
+  });
+
+  it('truncateToTokens honors the budget for an arbitrary tokenizer', () => {
+    const out = truncateToTokens('alpha beta gamma delta epsilon', 2, wordTokenizer);
+    assert.ok(wordTokenizer.countTokens(out) <= 2);
+    assert.ok(out.startsWith('alpha'));
+  });
+
+  it('truncateToTokens does not split a surrogate pair', () => {
+    // each 😀 is a surrogate pair (2 UTF-16 code units); heuristic counts by length/4
+    const emoji = '😀😀😀😀😀😀😀😀';
+    const out = truncateToTokens(emoji, 1, heuristicTokenizer);
+    // No lone high surrogate at the end
+    const last = out.charCodeAt(out.length - 1);
+    assert.ok(!(last >= 0xd800 && last <= 0xdbff), 'must not end on a lone high surrogate');
+  });
+});
+
+describe('gpt-tokenizer adapter', () => {
+  it('counts real BPE tokens (denser than the heuristic for code)', () => {
+    const code = 'const client_secret = "sk_live_9fJ2bQ7xZ1aN4kP8";';
+    const real = gptTokenizer.countTokens(code);
+    const heuristic = heuristicTokenizer.countTokens(code);
+    assert.ok(real > 0);
+    assert.ok(real > heuristic, 'real tokenizer should count more tokens than ceil(len/4) for code');
+  });
+
+  it('enforces the real-token budget when used by the engine', () => {
+    const contract: ContextContract = {
+      version: '1.0.0',
+      name: 'gpt-contract',
+      maxTotalTokens: 1000,
+      slots: [
+        { name: 'code', source: 'dynamic', priority: 0, required: true, compaction: 'truncate', format: 'text', immutable: false, maxTokens: 10 }
+      ],
+      rules: []
+    };
+    const engine = new Engine(contract, { tokenizer: gptTokenizer });
+    const longCode = 'function add(a, b) { return a + b; } '.repeat(20);
+    const result = engine.assemble({ code: longCode });
+    const usage = result.metadata.slotUsage['code'];
+    assert.strictEqual(usage.status, 'truncated');
+    // The assembled slot text must really fit within 10 OpenAI tokens.
+    assert.ok(usage.allocatedTokens <= 10, `allocated ${usage.allocatedTokens} > 10`);
+    const body = result.content.split('=== START SLOT: code ===\n')[1].split('\n=== END SLOT')[0];
+    assert.ok(gptTokenizer.countTokens(body) <= 10);
   });
 });
 

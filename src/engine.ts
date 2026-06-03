@@ -7,16 +7,57 @@ import {
   ValidationVerdict,
   SlotUsageInfo,
   AssemblyMetadata,
-  AssembledPayload
+  AssembledPayload,
+  Tokenizer
 } from './types.js';
 
 /**
  * Estimates the token count of a given string using a standard approximation
- * (1 token ≈ 4 characters).
+ * (1 token ≈ 4 characters). This is the deterministic *fallback*; for accurate
+ * budgeting against a real model, inject a real Tokenizer into the Engine.
  */
 export function estimateTokens(text: string): number {
   if (!text) return 0;
   return Math.ceil(text.length / 4);
+}
+
+/**
+ * Default tokenizer: the 4-chars-per-token heuristic. Cheap and dependency-free,
+ * but only an approximation of any real model tokenizer.
+ */
+export const heuristicTokenizer: Tokenizer = {
+  countTokens: estimateTokens
+};
+
+/**
+ * Returns the longest prefix of `text` whose token count is <= maxTokens, for ANY
+ * tokenizer. Uses the tokenizer's native truncation if provided, otherwise a
+ * surrogate-safe binary search over the character length. This is what makes the
+ * budget invariant hold regardless of the tokenizer in use.
+ */
+export function truncateToTokens(text: string, maxTokens: number, tokenizer: Tokenizer): string {
+  if (maxTokens <= 0) return '';
+  if (tokenizer.countTokens(text) <= maxTokens) return text;
+  if (tokenizer.truncateToTokens) return tokenizer.truncateToTokens(text, maxTokens);
+
+  let lo = 0;
+  let hi = text.length;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = (lo + hi) >> 1;
+    if (tokenizer.countTokens(text.slice(0, mid)) <= maxTokens) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  // Never end on a lone high surrogate (would emit a broken half of a code point).
+  if (best > 0 && best < text.length) {
+    const code = text.charCodeAt(best - 1);
+    if (code >= 0xd800 && code <= 0xdbff) best -= 1;
+  }
+  return text.slice(0, best);
 }
 
 /**
@@ -28,9 +69,11 @@ export function computeHash(text: string): string {
 
 export class Engine {
   private contract: ContextContract;
+  private tokenizer: Tokenizer;
 
-  constructor(contract: ContextContract) {
+  constructor(contract: ContextContract, options: { tokenizer?: Tokenizer } = {}) {
     this.contract = contract;
+    this.tokenizer = options.tokenizer ?? heuristicTokenizer;
   }
 
   /**
@@ -52,7 +95,7 @@ export class Engine {
 
     for (const slot of sortedSlots) {
       const rawText = inputs[slot.name] || '';
-      const requestedTokens = estimateTokens(rawText);
+      const requestedTokens = this.tokenizer.countTokens(rawText);
       
       // Default state
       let allocatedTokens = 0;
@@ -95,10 +138,9 @@ export class Engine {
           finalText = '';
           status = 'omitted';
         } else if (slot.compaction === 'truncate') {
-          allocatedTokens = slotLimit;
-          // Approximate truncation by character limit (4 characters per token)
-          const charLimit = slotLimit * 4;
-          finalText = rawText.substring(0, charLimit);
+          // Truncate to the largest prefix that fits, using the active tokenizer.
+          finalText = truncateToTokens(rawText, slotLimit, this.tokenizer);
+          allocatedTokens = this.tokenizer.countTokens(finalText);
           status = 'truncated';
           findings.push({
             severity: 'warning',
@@ -108,13 +150,17 @@ export class Engine {
           });
         } else if (slot.compaction === 'summarize') {
           // Reserve room for the marker so the final text (content + marker)
-          // never exceeds the slot's character budget.
+          // never exceeds the slot's token budget, under any tokenizer.
           const marker = '\n\n[... Content truncated & summarized ...]';
-          const charBudget = slotLimit * 4;
-          const charLimit = Math.max(0, charBudget - marker.length);
-          finalText = (rawText.substring(0, charLimit) + marker).substring(0, charBudget);
-          // Report the actual token cost of the compacted text, not the ceiling.
-          allocatedTokens = estimateTokens(finalText);
+          const markerTokens = this.tokenizer.countTokens(marker);
+          const bodyBudget = Math.max(0, slotLimit - markerTokens);
+          const body = truncateToTokens(rawText, bodyBudget, this.tokenizer);
+          finalText = body + marker;
+          // Hard guarantee: if the marker alone overflows a tiny budget, clamp the whole.
+          if (this.tokenizer.countTokens(finalText) > slotLimit) {
+            finalText = truncateToTokens(finalText, slotLimit, this.tokenizer);
+          }
+          allocatedTokens = this.tokenizer.countTokens(finalText);
           status = 'summarized';
           findings.push({
             severity: 'warning',

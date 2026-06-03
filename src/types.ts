@@ -52,6 +52,21 @@ export const ContextContractSchema = z.object({
 });
 export type ContextContract = z.infer<typeof ContextContractSchema>;
 
+/**
+ * Pluggable token counter. The engine depends only on this interface, never on a
+ * specific tokenizer, so contracts can be budgeted against a real model tokenizer.
+ */
+export interface Tokenizer {
+  /** Number of tokens the given text occupies. */
+  countTokens(text: string): number;
+  /**
+   * Optional tokenizer-native truncation: the longest prefix of `text` whose token
+   * count is <= maxTokens. If omitted, the engine derives it via binary search on
+   * `countTokens`, which works for any tokenizer.
+   */
+  truncateToTokens?(text: string, maxTokens: number): string;
+}
+
 export interface ValidationFinding {
   severity: 'error' | 'warning' | 'info';
   rule: string;

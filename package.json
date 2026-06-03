@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/src/index.d.ts",
       "import": "./dist/src/index.js"
+    },
+    "./adapters/gpt-tokenizer": {
+      "types": "./dist/src/adapters/gpt-tokenizer.d.ts",
+      "import": "./dist/src/adapters/gpt-tokenizer.js"
     }
   },
   "bin": {
@@ -54,5 +58,8 @@
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^22.0.0",
     "typescript": "^5.5.4"
+  },
+  "optionalDependencies": {
+    "gpt-tokenizer": "^3.4.0"
   }
 }

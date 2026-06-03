@@ -159,7 +159,7 @@ npm test
 
 Esta versión es funcional pero tiene atajos deliberados que conviene conocer antes de usarla en producción:
 
-- **Conteo de tokens aproximado**: usa la heurística `1 token ≈ 4 caracteres`, no el tokenizador real del modelo. Los presupuestos son orientativos, no garantías exactas frente a la ventana del modelo. *(Roadmap: tokenizador enchufable, p. ej. `tiktoken`.)*
+- **Conteo de tokens**: por defecto usa la heurística `1 token ≈ 4 caracteres`. Para presupuestos exactos, el tokenizador es **enchufable**: usa `--tokenizer gpt` en la CLI o inyecta `gptTokenizer` en el `Engine` para contar tokens BPE reales (OpenAI cl100k_base). El truncado respeta el presupuesto con cualquier tokenizador.
 - **`compaction: "summarize"` no resume**: trunca y añade un marcador. *(Roadmap: estrategia de compactación enchufable, opcionalmente vía LLM.)*
 - **`type: "schema"` es validación simplificada**: solo comprueba la presencia de claves de primer nivel listadas en `required`, no es JSON Schema completo. *(Roadmap: integrar `ajv`/Zod.)*
 - **Referencias `{slot}`**: solo se *detectan* las rotas (`broken-ref`); no hay interpolación/sustitución de referencias válidas.
