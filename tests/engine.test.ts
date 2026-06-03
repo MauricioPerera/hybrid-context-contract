@@ -273,6 +273,37 @@ describe('Contract Semantic Diff Engine', () => {
     assert.ok(diff.regressions.some(r => r.includes('Priority of slot "system" was lowered')));
     assert.ok(diff.regressions.some(r => r.includes('Required slot "user_input" was removed')));
   });
+
+  it('detects contract-weakening regressions (compaction, severity, immutable, required, maxTokens, rule removal)', () => {
+    const v1: ContextContract = {
+      version: '1.0.0', name: 'c', maxTotalTokens: 1000,
+      slots: [
+        { name: 'system', source: 'static', priority: 0, required: true, compaction: 'error', format: 'text', immutable: true, maxTokens: 500 }
+      ],
+      rules: [
+        { name: 'secrets', type: 'regex', targetSlot: 'system', pattern: 'x', severity: 'error' },
+        { name: 'doomed', type: 'broken-ref', targetSlot: 'system', severity: 'warning' }
+      ]
+    };
+    const v2: ContextContract = {
+      version: '1.1.0', name: 'c', maxTotalTokens: 1000,
+      slots: [
+        { name: 'system', source: 'static', priority: 0, required: false, compaction: 'truncate', format: 'text', immutable: false, maxTokens: 200 }
+      ],
+      rules: [
+        { name: 'secrets', type: 'regex', targetSlot: 'system', pattern: 'x', severity: 'warning' }
+        // 'doomed' removed
+      ]
+    };
+
+    const r = diffContracts(v1, v2).regressions.join(' | ');
+    assert.ok(/no longer immutable/.test(r), 'immutable drop');
+    assert.ok(/compaction from "error"/.test(r), 'compaction relaxed');
+    assert.ok(/no longer required/.test(r), 'required dropped');
+    assert.ok(/Per-slot budget/.test(r), 'maxTokens tightened');
+    assert.ok(/severity downgraded/.test(r), 'severity downgrade');
+    assert.ok(/"doomed".*was removed/.test(r), 'rule removed');
+  });
 });
 
 describe('Schema and immutable-hash rules', () => {

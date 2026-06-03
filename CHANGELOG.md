@@ -3,6 +3,11 @@
 Todas las modificaciones notables de este proyecto se documentan aquí.
 El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado [SemVer](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Diff semántico** detecta más regresiones de política de contexto: `maxTokens` de slot reducido, slot que deja de ser `immutable`, `compaction` que pasa de `error` a una estrategia con pérdida, slot que deja de ser `required`, severidad de regla rebajada, y regla eliminada.
+
 ## [1.0.0] - 2026-06-03
 
 Primer release. Framework para definir, mezclar y validar **Contratos de Contexto Híbrido** con validación determinista para LLMs y sistemas de agentes.

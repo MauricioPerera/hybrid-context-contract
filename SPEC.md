@@ -223,6 +223,12 @@ Compara dos contratos y produce cambios + regresiones.
 1. `maxTotalTokens` **disminuye** (riesgo de truncamiento inesperado).
 2. La `priority` de un slot **aumenta** de valor (pierde importancia, se presupuesta más tarde → más expuesto a truncado).
 3. Un slot **requerido** es **eliminado**.
+4. El `maxTokens` de un slot **disminuye** (más expuesto a compactación).
+5. Un slot deja de ser `immutable` (se pierde la garantía de integridad).
+6. La `compaction` de un slot pasa de `error` a una estrategia con pérdida (de fail-safe a silenciosamente lossy).
+7. Un slot deja de ser `required` (puede ausentarse silenciosamente).
+8. La `severity` de una regla **se rebaja** (`error`→`warning`→`info`: deja de bloquear).
+9. Una **regla se elimina** (se pierde cobertura de validación).
 
 El renderizado Markdown (`formatDiffMarkdown`) lista los cambios y, si no hay regresiones, emite "✅ No Regressions Detected".
 

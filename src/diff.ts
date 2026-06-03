@@ -40,6 +40,9 @@ export interface ContractDiffResult {
   regressions: string[];
 }
 
+// Higher = stricter. Used to detect rule-severity downgrades (a contract weakening).
+const SEVERITY_RANK: Record<string, number> = { error: 2, warning: 1, info: 0 };
+
 export function diffContracts(oldContract: ContextContract, newContract: ContextContract): ContractDiffResult {
   const result: ContractDiffResult = {
     metadata: {},
@@ -99,14 +102,33 @@ export function diffContracts(oldContract: ContextContract, newContract: Context
       if (oldSlot.maxTokens !== newSlot.maxTokens) {
         changes.maxTokens = { from: oldSlot.maxTokens, to: newSlot.maxTokens };
         modified = true;
+        // Regression: per-slot budget tightened (more prone to truncation).
+        if (typeof oldSlot.maxTokens === 'number' && typeof newSlot.maxTokens === 'number'
+            && newSlot.maxTokens < oldSlot.maxTokens) {
+          result.regressions.push(
+            `Per-slot budget of "${name}" decreased from ${oldSlot.maxTokens} to ${newSlot.maxTokens} tokens. Its content is more likely to be compacted.`
+          );
+        }
       }
       if (oldSlot.immutable !== newSlot.immutable) {
         changes.immutable = { from: oldSlot.immutable, to: newSlot.immutable };
         modified = true;
+        // Regression: integrity guarantee dropped.
+        if (oldSlot.immutable && !newSlot.immutable) {
+          result.regressions.push(
+            `Slot "${name}" is no longer immutable. Its content can now drift without triggering an integrity error.`
+          );
+        }
       }
       if (oldSlot.compaction !== newSlot.compaction) {
         changes.compaction = { from: oldSlot.compaction, to: newSlot.compaction };
         modified = true;
+        // Regression: a fail-safe slot ('error') became silently lossy.
+        if (oldSlot.compaction === 'error' && newSlot.compaction !== 'error') {
+          result.regressions.push(
+            `Slot "${name}" changed compaction from "error" to "${newSlot.compaction}". Overflow will now be silently compacted instead of failing.`
+          );
+        }
       }
       if (oldSlot.format !== newSlot.format) {
         changes.format = { from: oldSlot.format, to: newSlot.format };
@@ -115,6 +137,12 @@ export function diffContracts(oldContract: ContextContract, newContract: Context
       if (oldSlot.required !== newSlot.required) {
         changes.required = { from: oldSlot.required, to: newSlot.required };
         modified = true;
+        // Regression: a required slot became optional (may now be silently absent).
+        if (oldSlot.required && !newSlot.required) {
+          result.regressions.push(
+            `Slot "${name}" is no longer required. It may now be silently absent from the assembled context.`
+          );
+        }
       }
 
       if (modified) {
@@ -168,6 +196,14 @@ export function diffContracts(oldContract: ContextContract, newContract: Context
       if (oldRule.severity !== newRule.severity) {
         changes.severity = { from: oldRule.severity, to: newRule.severity };
         modified = true;
+        // Regression: severity downgraded (the rule now blocks less, or not at all).
+        const oldRank = SEVERITY_RANK[oldRule.severity] ?? 0;
+        const newRank = SEVERITY_RANK[newRule.severity] ?? 0;
+        if (newRank < oldRank) {
+          result.regressions.push(
+            `Rule "${name}" severity downgraded from "${oldRule.severity}" to "${newRule.severity}". It enforces less than before.`
+          );
+        }
       }
 
       if (modified) {
@@ -186,6 +222,11 @@ export function diffContracts(oldContract: ContextContract, newContract: Context
         type: 'removed',
         name
       });
+      // Regression: a deterministic check was dropped (loss of validation coverage).
+      const oldRule = oldRulesMap.get(name);
+      result.regressions.push(
+        `Rule "${name}" (${oldRule?.type}, severity "${oldRule?.severity}") was removed. The contract validates less than before.`
+      );
     }
   }
 
