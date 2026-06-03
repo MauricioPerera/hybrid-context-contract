@@ -1,0 +1,48 @@
+=== START SLOT: system ===
+You are a Senior Principal Code Reviewer agent.
+Your goal is to analyze code changes and identify bugs, performance problems, and design issues.
+Refer to {guidelines} to check style and architectural patterns.
+Print findings in clean markdown.
+
+=== END SLOT: system ===
+
+=== START SLOT: guidelines ===
+- Prefer composition over inheritance.
+- Keep functions short and single-purpose.
+- Never hardcode secrets or environment credentials in the source code.
+- Write unit tests for all public modules.
+- Ensure proper logging and error handling.
+
+=== END SLOT: guidelines ===
+
+=== START SLOT: metadata ===
+{
+  "user_role": "senior-engineer",
+  "target_branch": "main",
+  "locale": "en-US",
+  "ci_run_id": "998273"
+}
+
+=== END SLOT: metadata ===
+
+=== START SLOT: changed_code ===
+diff --git a/src/db.js b/src/db.js
+index 927d381..8137cd7 100644
+--- a/src/db.js
++++ b/src/db.js
+@@ -10,3 +10,6 @@ export function connect() {
+   const dbUri = process.env.DATABASE_URL || "postgres://localhost:5432/mydb";
+   return new DatabaseClient(dbUri);
+ }
++
++// Credentials read from env
++const client_secret = process.env.API_SECRET;
+
+=== END SLOT: changed_code ===
+
+=== START SLOT: user_message ===
+Please review this database connection change. Make sure it follows all {guidelines} and is secure.
+If you find problems, please explain them clearly.
+Also check if it is compatible with {system} references.
+
+=== END SLOT: user_message ===

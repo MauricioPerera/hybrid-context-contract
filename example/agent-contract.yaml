@@ -1,0 +1,72 @@
+version: "1.0.0"
+name: "CodeReviewAgentContract"
+maxTotalTokens: 2500
+
+slots:
+  - name: "system"
+    source: "static"
+    priority: 0
+    immutable: true
+    compaction: "error"
+    format: "text"
+    required: true
+    description: "Core agent system instructions"
+
+  - name: "guidelines"
+    source: "static"
+    priority: 1
+    immutable: false
+    compaction: "error"
+    format: "text"
+    required: true
+    maxTokens: 400
+    description: "General code style guidelines"
+
+  - name: "metadata"
+    source: "environment"
+    priority: 2
+    immutable: false
+    compaction: "error"
+    format: "json"
+    required: true
+    description: "Environment metadata (locale, permissions, target branch)"
+
+  - name: "changed_code"
+    source: "dynamic"
+    priority: 3
+    immutable: false
+    compaction: "summarize"
+    format: "text"
+    required: true
+    maxTokens: 1000
+    description: "Dynamic file diff submitted by user"
+
+  - name: "user_message"
+    source: "dynamic"
+    priority: 4
+    immutable: false
+    compaction: "truncate"
+    format: "text"
+    required: true
+    description: "User instructions for this run"
+
+rules:
+  - name: "no-secrets-allowed"
+    type: "regex"
+    targetSlot: "changed_code"
+    pattern: "(api_key|API_KEY|password|PASSWORD|client_secret|CLIENT_SECRET|client_secret)\\s*=\\s*['\"][a-zA-Z0-9-_]{16,}['\"]"
+    negate: true
+    severity: "error"
+    message: "A potential hardcoded secret (API key, password, or client secret) was detected in the submitted code diff."
+
+  - name: "metadata-format-schema"
+    type: "schema"
+    targetSlot: "metadata"
+    schemaJson: "{\"required\": [\"user_role\", \"target_branch\"]}"
+    severity: "error"
+    message: "The environment metadata JSON is missing required fields (user_role and target_branch)."
+
+  - name: "check-broken-references"
+    type: "broken-ref"
+    targetSlot: "user_message"
+    severity: "warning"

@@ -1,0 +1,11 @@
+diff --git a/src/db.js b/src/db.js
+index 927d381..8137cd7 100644
+--- a/src/db.js
++++ b/src/db.js
+@@ -10,3 +10,6 @@ export function connect() {
+   const dbUri = process.env.DATABASE_URL || "postgres://localhost:5432/mydb";
+   return new DatabaseClient(dbUri);
+ }
++
++// Quick fix to unblock the deploy
++const client_secret = "FAKEDEMO_not_a_real_secret_000000";

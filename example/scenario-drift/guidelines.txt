@@ -1,0 +1,5 @@
+- Prefer composition over inheritance.
+- Keep functions short and single-purpose.
+- Never hardcode secrets or environment credentials in the source code.
+- Write unit tests for all public modules.
+- Ensure proper logging and error handling.

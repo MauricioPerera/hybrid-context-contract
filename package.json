@@ -1,0 +1,58 @@
+{
+  "name": "hybrid-context-contract",
+  "version": "1.0.0",
+  "description": "Niche-agnostic framework for defining, mixing, and validating hybrid context contracts with deterministic validation for LLMs and agent systems",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/src/index.js"
+    }
+  },
+  "bin": {
+    "hcc": "dist/src/cli.js"
+  },
+  "files": [
+    "dist/src",
+    "SPEC.md",
+    "docs"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "tsc && node --test dist/tests/**/*.test.js",
+    "lint": "tsc && node dist/src/cli.js lint",
+    "cli": "tsc && node dist/src/cli.js",
+    "demo": "tsc -p example/tsconfig.json && node dist/example/run-demos.js",
+    "prepublishOnly": "npm test"
+  },
+  "keywords": [
+    "llm",
+    "context",
+    "prompt",
+    "validation",
+    "agents",
+    "token-budget",
+    "deterministic",
+    "ci"
+  ],
+  "author": "Mauricio Perera <mauricio.perera@gmail.com>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mauricioperera/hybrid-context-contract.git"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "typescript": "^5.5.4"
+  }
+}
