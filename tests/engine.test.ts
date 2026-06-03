@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import { Engine, computeHash, truncateToTokens, heuristicTokenizer } from '../src/engine.js';
 import { diffContracts } from '../src/diff.js';
 import { gptTokenizer } from '../src/adapters/gpt-tokenizer.js';
-import { ContextContract, Tokenizer } from '../src/types.js';
+import { ContextContract, Tokenizer, RuleHandler } from '../src/types.js';
 
 describe('Hybrid Context Contract Engine', () => {
   const mockContract: ContextContract = {
@@ -354,6 +354,48 @@ describe('Schema and immutable-hash rules', () => {
     assert.ok(finding);
     assert.strictEqual(finding.severity, 'error');
     assert.strictEqual(result.verdict.valid, false);
+  });
+});
+
+describe('Custom rule handlers (extensibility)', () => {
+  const base = (ruleType: string): ContextContract => ({
+    version: '1.0.0',
+    name: 'ext-contract',
+    maxTotalTokens: 1000,
+    slots: [
+      { name: 'body', source: 'dynamic', priority: 0, required: true, compaction: 'truncate', format: 'text', immutable: false }
+    ],
+    rules: [
+      { name: 'limit-words', type: ruleType, targetSlot: 'body', pattern: '3', severity: 'error' }
+    ]
+  });
+
+  it('runs a custom rule type registered on the engine', () => {
+    const maxWords: RuleHandler = ({ rule, text }) => {
+      const limit = Number(rule.pattern ?? '0');
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      return words > limit
+        ? [{ severity: rule.severity, rule: rule.name, message: `too many words: ${words} > ${limit}`, slot: rule.targetSlot }]
+        : [];
+    };
+
+    const engine = new Engine(base('max-words'), { ruleHandlers: { 'max-words': maxWords } });
+
+    const ok = engine.assemble({ body: 'a b c' });
+    assert.strictEqual(ok.verdict.valid, true);
+
+    const bad = engine.assemble({ body: 'a b c d e' });
+    assert.strictEqual(bad.verdict.valid, false);
+    assert.ok(bad.verdict.findings.some(f => f.rule === 'limit-words'));
+  });
+
+  it('warns (does not crash) on an unknown rule type with no handler', () => {
+    const engine = new Engine(base('totally-unknown'));
+    const result = engine.assemble({ body: 'hello' });
+    const finding = result.verdict.findings.find(f => f.rule === 'unknown-rule-type');
+    assert.ok(finding);
+    assert.strictEqual(finding.severity, 'warning');
+    assert.strictEqual(result.verdict.valid, true); // warning does not invalidate
   });
 });
 

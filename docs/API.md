@@ -15,7 +15,8 @@ Motor de ensamblado y validación. Se construye con un contrato ya validado y, o
 
 ```ts
 const engine = new Engine(contract /* : ContextContract */, {
-  tokenizer /* ?: Tokenizer — por defecto, heurístico 4 chars/token */
+  tokenizer,     /* ?: Tokenizer — por defecto, heurístico 4 chars/token */
+  ruleHandlers   /* ?: Record<string, RuleHandler> — reglas personalizadas (sobrescriben built-ins por tipo) */
 });
 ```
 
@@ -78,6 +79,21 @@ Renderiza un `ContractDiffResult` como Markdown legible.
   truncateToTokens?(text: string, maxTokens: number): string;  // opcional
 }
 ```
+
+### `RuleHandler` / `RuleContext`
+```ts
+type RuleHandler = (ctx: RuleContext) => ValidationFinding[];
+
+interface RuleContext {
+  rule: DeterministicCheckRule;
+  text: string;                          // texto asignado del targetSlot
+  allocatedTexts: Record<string, string>;
+  contract: ContextContract;
+  expectedHashes?: Record<string, string>;
+  computeHash: (text: string) => string;
+}
+```
+Los handlers built-in se exportan como `builtinRuleHandlers: Record<string, RuleHandler>`. Un handler personalizado con el mismo tipo sobrescribe al built-in. Un `type` sin handler produce un hallazgo `warning` (`unknown-rule-type`).
 
 ### `ContextContract`
 ```ts

@@ -22,17 +22,19 @@ export const SlotDefinitionSchema = z.object({
 });
 export type SlotDefinition = z.infer<typeof SlotDefinitionSchema>;
 
-export const CheckRuleTypeSchema = z.enum([
+export const BUILTIN_RULE_TYPES = [
   'regex',            // Check content matches (or does not match) a pattern
   'broken-ref',       // Check that cross-slot references resolve
   'immutable-hash',   // Check that static immutable content hasn't drifted
   'schema'            // Check JSON schema if slot format is json
-]);
+] as const;
+export const CheckRuleTypeSchema = z.enum(BUILTIN_RULE_TYPES);
 export type CheckRuleType = z.infer<typeof CheckRuleTypeSchema>;
 
 export const DeterministicCheckRuleSchema = z.object({
   name: z.string(),
-  type: CheckRuleTypeSchema,
+  // A built-in type (see BUILTIN_RULE_TYPES) or any custom type registered on the Engine.
+  type: z.string(),
   targetSlot: z.string(),
   pattern: z.string().optional(),     // Regex pattern for 'regex' checks
   flags: z.string().optional(),       // Optional regex flags (e.g. 'i', 'm', 'gm') for 'regex' checks
@@ -78,6 +80,30 @@ export interface ValidationVerdict {
   valid: boolean;
   findings: ValidationFinding[];
 }
+
+/**
+ * Context passed to a rule handler when the linter evaluates one rule.
+ */
+export interface RuleContext {
+  /** The rule being evaluated. */
+  rule: DeterministicCheckRule;
+  /** Allocated (post-compaction) text of the rule's targetSlot, or '' if absent. */
+  text: string;
+  /** All allocated slot texts, for rules that need cross-slot access. */
+  allocatedTexts: Record<string, string>;
+  /** The full contract (e.g. to resolve declared slot names). */
+  contract: ContextContract;
+  /** Expected SHA-256 hashes by slot, if provided to the engine. */
+  expectedHashes?: Record<string, string>;
+  /** SHA-256 helper, so handlers don't import crypto directly. */
+  computeHash: (text: string) => string;
+}
+
+/**
+ * A deterministic rule handler: pure function from a RuleContext to findings.
+ * Register custom handlers via `new Engine(contract, { ruleHandlers })`.
+ */
+export type RuleHandler = (ctx: RuleContext) => ValidationFinding[];
 
 export interface SlotUsageInfo {
   requestedTokens: number;

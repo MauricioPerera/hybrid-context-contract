@@ -8,7 +8,9 @@ import {
   SlotUsageInfo,
   AssemblyMetadata,
   AssembledPayload,
-  Tokenizer
+  Tokenizer,
+  RuleContext,
+  RuleHandler
 } from './types.js';
 
 /**
@@ -67,13 +69,133 @@ export function computeHash(text: string): string {
   return createHash('sha256').update(text, 'utf8').digest('hex');
 }
 
+// ---------------------------------------------------------------------------
+// Built-in rule handlers. Each is a pure function (RuleContext) => findings.
+// They are dispatched by `rule.type`; custom handlers can be registered on the
+// Engine to extend or override these.
+// ---------------------------------------------------------------------------
+
+const regexRuleHandler: RuleHandler = ({ rule, text }) => {
+  if (!rule.pattern) {
+    return [{
+      severity: 'warning',
+      rule: 'invalid-rule-config',
+      message: `Regex rule "${rule.name}" misses pattern configuration.`,
+      slot: rule.targetSlot
+    }];
+  }
+  try {
+    // Strip the global flag: a stateful `lastIndex` would make repeated
+    // .test() calls non-deterministic, defeating the purpose of the check.
+    const safeFlags = (rule.flags || '').replace(/g/g, '');
+    const regex = new RegExp(rule.pattern, safeFlags);
+    const matches = regex.test(text);
+    const shouldTrigger = rule.negate ? matches : !matches;
+    if (shouldTrigger) {
+      return [{
+        severity: rule.severity,
+        rule: rule.name,
+        message: rule.message || `Regex verification failed for slot "${rule.targetSlot}" using pattern: ${rule.pattern}`,
+        slot: rule.targetSlot
+      }];
+    }
+    return [];
+  } catch (e: any) {
+    return [{
+      severity: 'error',
+      rule: 'invalid-regex-syntax',
+      message: `Invalid regex pattern "${rule.pattern}" in rule "${rule.name}": ${e.message}`,
+      slot: rule.targetSlot
+    }];
+  }
+};
+
+const schemaRuleHandler: RuleHandler = ({ rule, text }) => {
+  if (!text.trim()) return [];
+  const findings: ValidationFinding[] = [];
+  try {
+    const parsed = JSON.parse(text);
+    if (rule.schemaJson) {
+      const schema = JSON.parse(rule.schemaJson);
+      if (schema.required && Array.isArray(schema.required)) {
+        for (const reqKey of schema.required) {
+          if (!(reqKey in parsed)) {
+            findings.push({
+              severity: rule.severity,
+              rule: rule.name,
+              message: `JSON content in slot "${rule.targetSlot}" misses required schema key: "${reqKey}"`,
+              slot: rule.targetSlot
+            });
+          }
+        }
+      }
+    }
+  } catch (e: any) {
+    findings.push({
+      severity: 'error',
+      rule: `${rule.name}-invalid-json`,
+      message: `JSON syntax error in slot "${rule.targetSlot}": ${e.message}`,
+      slot: rule.targetSlot
+    });
+  }
+  return findings;
+};
+
+const immutableHashRuleHandler: RuleHandler = ({ rule, text, expectedHashes, computeHash: hash }) => {
+  if (!text.trim()) return [];
+  const currentHash = hash(text);
+  const expectedHash = expectedHashes?.[rule.targetSlot];
+  if (expectedHash && currentHash !== expectedHash) {
+    return [{
+      severity: rule.severity,
+      rule: rule.name,
+      message: `Immutable verification failed for slot "${rule.targetSlot}". Content hash has drifted from expected signature.`,
+      slot: rule.targetSlot
+    }];
+  }
+  return [];
+};
+
+const brokenRefRuleHandler: RuleHandler = ({ rule, text, contract }) => {
+  const findings: ValidationFinding[] = [];
+  const refRegex = /\{([a-zA-Z0-9_-]+)(?:\.[a-zA-Z0-9_-]+)?\}/g;
+  const slotNames = contract.slots.map(s => s.name);
+  let match;
+  while ((match = refRegex.exec(text)) !== null) {
+    const referencedSlot = match[1];
+    if (!slotNames.includes(referencedSlot)) {
+      findings.push({
+        severity: rule.severity,
+        rule: rule.name,
+        message: `Broken reference: Reference "{${referencedSlot}}" found in slot "${rule.targetSlot}" refers to a slot that does not exist in the contract.`,
+        slot: rule.targetSlot
+      });
+    }
+  }
+  return findings;
+};
+
+/** The rule handlers shipped with the engine, keyed by rule type. */
+export const builtinRuleHandlers: Record<string, RuleHandler> = {
+  'regex': regexRuleHandler,
+  'schema': schemaRuleHandler,
+  'immutable-hash': immutableHashRuleHandler,
+  'broken-ref': brokenRefRuleHandler
+};
+
 export class Engine {
   private contract: ContextContract;
   private tokenizer: Tokenizer;
+  private ruleHandlers: Record<string, RuleHandler>;
 
-  constructor(contract: ContextContract, options: { tokenizer?: Tokenizer } = {}) {
+  constructor(
+    contract: ContextContract,
+    options: { tokenizer?: Tokenizer; ruleHandlers?: Record<string, RuleHandler> } = {}
+  ) {
     this.contract = contract;
     this.tokenizer = options.tokenizer ?? heuristicTokenizer;
+    // Custom handlers override/extend the built-ins by rule type.
+    this.ruleHandlers = { ...builtinRuleHandlers, ...(options.ruleHandlers || {}) };
   }
 
   /**
@@ -193,112 +315,27 @@ export class Engine {
   ): ValidationVerdict {
     const findings: ValidationFinding[] = [];
 
-    // 1. Structural checks from allocation
-    // We already generated some allocation findings; we will aggregate them.
-
-    // 2. Process custom rules in contract
+    // Dispatch each contract rule to its registered handler (built-in or custom).
     for (const rule of this.contract.rules) {
-      const text = allocatedTexts[rule.targetSlot] || '';
-
-      if (rule.type === 'regex') {
-        if (!rule.pattern) {
-          findings.push({
-            severity: 'warning',
-            rule: 'invalid-rule-config',
-            message: `Regex rule "${rule.name}" misses pattern configuration.`,
-            slot: rule.targetSlot
-          });
-          continue;
-        }
-
-        try {
-          // Strip the global flag: a stateful `lastIndex` would make repeated
-          // .test() calls non-deterministic, defeating the purpose of the check.
-          const safeFlags = (rule.flags || '').replace(/g/g, '');
-          const regex = new RegExp(rule.pattern, safeFlags);
-          const matches = regex.test(text);
-
-          const shouldTrigger = rule.negate ? matches : !matches;
-          if (shouldTrigger) {
-            findings.push({
-              severity: rule.severity,
-              rule: rule.name,
-              message: rule.message || `Regex verification failed for slot "${rule.targetSlot}" using pattern: ${rule.pattern}`,
-              slot: rule.targetSlot
-            });
-          }
-        } catch (e: any) {
-          findings.push({
-            severity: 'error',
-            rule: 'invalid-regex-syntax',
-            message: `Invalid regex pattern "${rule.pattern}" in rule "${rule.name}": ${e.message}`,
-            slot: rule.targetSlot
-          });
-        }
+      const handler = this.ruleHandlers[rule.type];
+      if (!handler) {
+        findings.push({
+          severity: 'warning',
+          rule: 'unknown-rule-type',
+          message: `No handler registered for rule type "${rule.type}" (rule "${rule.name}"). Rule skipped.`,
+          slot: rule.targetSlot
+        });
+        continue;
       }
-
-      if (rule.type === 'schema') {
-        if (!text.trim()) continue;
-        try {
-          const parsed = JSON.parse(text);
-          if (rule.schemaJson) {
-            // Simple key/type validation for JSON schema validation demonstration
-            const schema = JSON.parse(rule.schemaJson);
-            if (schema.required && Array.isArray(schema.required)) {
-              for (const reqKey of schema.required) {
-                if (!(reqKey in parsed)) {
-                  findings.push({
-                    severity: rule.severity,
-                    rule: rule.name,
-                    message: `JSON content in slot "${rule.targetSlot}" misses required schema key: "${reqKey}"`,
-                    slot: rule.targetSlot
-                  });
-                }
-              }
-            }
-          }
-        } catch (e: any) {
-          findings.push({
-            severity: 'error',
-            rule: `${rule.name}-invalid-json`,
-            message: `JSON syntax error in slot "${rule.targetSlot}": ${e.message}`,
-            slot: rule.targetSlot
-          });
-        }
-      }
-
-      if (rule.type === 'immutable-hash') {
-        if (!text.trim()) continue;
-        const currentHash = computeHash(text);
-        const expectedHash = expectedHashes?.[rule.targetSlot];
-        if (expectedHash && currentHash !== expectedHash) {
-          findings.push({
-            severity: rule.severity,
-            rule: rule.name,
-            message: `Immutable verification failed for slot "${rule.targetSlot}". Content hash has drifted from expected signature.`,
-            slot: rule.targetSlot
-          });
-        }
-      }
-
-      if (rule.type === 'broken-ref') {
-        // Matches cross-slot reference patterns like {slotName} or {slotName.key}
-        const refRegex = /\{([a-zA-Z0-9_-]+)(?:\.[a-zA-Z0-9_-]+)?\}/g;
-        let match;
-        const slotNames = this.contract.slots.map(s => s.name);
-
-        while ((match = refRegex.exec(text)) !== null) {
-          const referencedSlot = match[1];
-          if (!slotNames.includes(referencedSlot)) {
-            findings.push({
-              severity: rule.severity,
-              rule: rule.name,
-              message: `Broken reference: Reference "{${referencedSlot}}" found in slot "${rule.targetSlot}" refers to a slot that does not exist in the contract.`,
-              slot: rule.targetSlot
-            });
-          }
-        }
-      }
+      const ctx: RuleContext = {
+        rule,
+        text: allocatedTexts[rule.targetSlot] || '',
+        allocatedTexts,
+        contract: this.contract,
+        expectedHashes,
+        computeHash
+      };
+      findings.push(...handler(ctx));
     }
 
     // 3. Immutability checks: if a slot is marked immutable, verify that it isn't tampered with

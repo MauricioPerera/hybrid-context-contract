@@ -56,7 +56,7 @@ Un contrato que no satisface el esquema **DEBE** ser rechazado (la CLI termina c
 | Campo        | Tipo                                                   | Requerido | Por defecto | Uso                                  |
 |--------------|--------------------------------------------------------|-----------|-------------|--------------------------------------|
 | `name`       | string                                                 | sí        | —           | identificador del hallazgo           |
-| `type`       | `regex` \| `broken-ref` \| `immutable-hash` \| `schema`| sí        | —           | tipo de chequeo                      |
+| `type`       | string                                                 | sí        | —           | tipo de chequeo: un built-in (`regex`, `broken-ref`, `immutable-hash`, `schema`) o uno personalizado registrado en el `Engine` |
 | `targetSlot` | string                                                 | sí        | —           | slot sobre el que opera              |
 | `pattern`    | string                                                 | no        | —           | patrón regex (solo `regex`)          |
 | `flags`      | string                                                 | no        | —           | flags regex; `g` se ignora (solo `regex`) |
@@ -115,7 +115,7 @@ Para cada slot, con `raw = inputs[slot.name] || ''`:
 
 ## 5. Validación / Linter (`lint`)
 
-Las reglas del contrato se ejecutan sobre los textos **ya asignados** (post-compactación). Tipos:
+Las reglas del contrato se ejecutan sobre los textos **ya asignados** (post-compactación). Cada regla se despacha a un **handler** registrado por su `type` (registro = built-ins + handlers personalizados inyectados; ver §5.7). Si no hay handler para el `type`, se emite un hallazgo `warning` con regla `unknown-rule-type` y la regla se omite. Tipos built-in:
 
 ### 5.1 `regex`
 - Sin `pattern`: hallazgo `warning` regla `invalid-rule-config`; se omite la regla.
@@ -153,6 +153,19 @@ Independiente de las reglas, **para todo slot con `immutable: true`**:
 verdict.valid = (ningún hallazgo tiene severity === 'error')
 ```
 Los `warning` e `info` **no** invalidan el contexto.
+
+### 5.7 Reglas personalizadas (extensibilidad)
+El motor despacha cada regla a un `RuleHandler` (función pura `(RuleContext) => ValidationFinding[]`) buscado en un registro por `rule.type`. El registro se forma con los handlers built-in más los que se inyecten:
+
+```ts
+const engine = new Engine(contract, {
+  ruleHandlers: { 'max-words': ({ rule, text }) => /* … */ [] }
+});
+```
+
+- Un handler personalizado con el mismo `type` que un built-in lo **sobrescribe**.
+- `RuleContext` expone: `rule`, `text` (del `targetSlot`), `allocatedTexts`, `contract`, `expectedHashes` y `computeHash`.
+- El chequeo implícito de inmutabilidad (§5.5) **no** es una regla y no es extensible por esta vía.
 
 ---
 

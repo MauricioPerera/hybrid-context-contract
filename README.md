@@ -146,6 +146,26 @@ if (result.verdict.valid) {
 3. **`schema`**: Si el formato del slot es `json`, valida la sintaxis y permite comprobar campos requeridos a través de JSON Schema simplificado.
 4. **`immutable-hash`** & **`immutable-slot-drift`**: Compara la firma del slot estático contra una lista de hashes firmada. Si el prompt estático cambia sin actualizar la firma, lanza error de compilación.
 
+### Reglas personalizadas
+
+El motor despacha cada regla a un handler registrado por su `type`. Puedes registrar tipos de regla propios (o sobrescribir los built-in) al instanciar el `Engine`:
+
+```typescript
+const engine = new Engine(contract, {
+  ruleHandlers: {
+    'max-words': ({ rule, text }) => {
+      const limit = Number(rule.pattern);
+      const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+      return words > limit
+        ? [{ severity: rule.severity, rule: rule.name, message: `Demasiadas palabras: ${words} > ${limit}`, slot: rule.targetSlot }]
+        : [];
+    }
+  }
+});
+```
+
+Un `type` sin handler registrado produce un hallazgo `warning` (`unknown-rule-type`) y se omite. Ver [docs/API.md](docs/API.md) para `RuleHandler`/`RuleContext`.
+
 ---
 
 ## 🧪 Ejecución de Pruebas
