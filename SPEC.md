@@ -61,7 +61,7 @@ Un contrato que no satisface el esquema **DEBE** ser rechazado (la CLI termina c
 | `pattern`    | string                                                 | no        | —           | patrón regex (solo `regex`)          |
 | `flags`      | string                                                 | no        | —           | flags regex; `g` se ignora (solo `regex`) |
 | `negate`     | boolean                                                | no        | —           | invierte la condición (solo `regex`) |
-| `schemaJson` | string                                                 | no        | —           | JSON Schema simplificado (solo `schema`) |
+| `schemaJson` | string                                                 | no        | —           | esquema JSON para `schema` (simplificado) y `json-schema` (adaptador `ajv`, completo) |
 | `message`    | string                                                 | no        | —           | mensaje del hallazgo                 |
 | `severity`   | `error` \| `warning` \| `info`                         | no        | `error`     | severidad del hallazgo               |
 

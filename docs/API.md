@@ -150,7 +150,7 @@ Valídalo con `ContextContractSchema.safeParse(obj)` antes de instanciar el `Eng
   priority: number;          // entero >= 0; menor = mayor prioridad
   maxTokens?: number;        // entero positivo
   immutable?: boolean;       // default false
-  compaction?: 'truncate' | 'summarize' | 'error';  // default 'error'
+  compaction?: string;       // 'error' (default) | 'truncate' | 'summarize' | estrategia personalizada
   format?: 'text' | 'json' | 'markdown';            // default 'text'
   required?: boolean;        // default true
   description?: string;
@@ -161,12 +161,12 @@ Valídalo con `ContextContractSchema.safeParse(obj)` antes de instanciar el `Eng
 ```ts
 {
   name: string;
-  type: 'regex' | 'broken-ref' | 'immutable-hash' | 'schema';
+  type: string;              // built-in ('regex'|'broken-ref'|'immutable-hash'|'schema') o tipo personalizado registrado
   targetSlot: string;
   pattern?: string;          // solo 'regex'
   flags?: string;            // solo 'regex'; el flag 'g' se ignora
   negate?: boolean;          // solo 'regex'
-  schemaJson?: string;       // solo 'schema'
+  schemaJson?: string;       // 'schema' (built-in) y 'json-schema' (adaptador ajv)
   message?: string;
   severity?: 'error' | 'warning' | 'info';  // default 'error'
 }

@@ -13,7 +13,7 @@
 npm install
 npm run build      # compila TypeScript a dist/
 npm test           # compila y corre la suite (node:test)
-npm run demo       # ejecuta los 4 escenarios de CI como prueba ejecutable
+npm run demo       # ejecuta los 6 escenarios de CI como prueba ejecutable
 ```
 
 Las dependencias de tokenizador (`gpt-tokenizer`) y JSON Schema (`ajv`) son **opcionales**; se instalan automáticamente pero el core funciona sin ellas.
@@ -56,7 +56,7 @@ Si la extensión depende de una librería pesada, colócala en `src/adapters/` c
 2. Haz tus cambios con tests y docs.
 3. Asegúrate de que pasan: `npm test` **y** `npm run demo`.
 4. Mensajes de commit estilo [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`…).
-5. Abre un PR describiendo el qué y el porqué. CI (Node 20/22) debe estar en verde.
+5. Abre un PR describiendo el qué y el porqué. CI (Node 20/22/24 + build del playground) debe estar en verde.
 
 ## Checklist de PR
 

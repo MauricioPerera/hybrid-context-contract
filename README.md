@@ -145,15 +145,15 @@ npm run cli -- diff --old path/to/contract_v1.yaml --new path/to/contract_v2.yam
 Puedes importar y usar el motor en tu backend de Node.js/TypeScript de forma sencilla:
 
 ```typescript
-import { Engine } from './src/engine.js';
+import { Engine, ContextContractSchema } from 'hybrid-context-contract';
 import yaml from 'js-yaml';
 import fs from 'fs';
 
-// 1. Cargar el contrato
-const contractContent = yaml.load(fs.readFileSync('contract.yaml', 'utf8'));
+// 1. Cargar y validar el contrato (Zod)
+const contract = ContextContractSchema.parse(yaml.load(fs.readFileSync('contract.yaml', 'utf8')));
 
 // 2. Instanciar el motor
-const engine = new Engine(contractContent);
+const engine = new Engine(contract);
 
 // 3. Definir entradas dinámicas y del entorno recolectadas
 const inputs = {
@@ -190,8 +190,8 @@ Para un ejemplo end-to-end con un SDK de LLM real (contrato → tokenizador BPE 
 
 1. **`regex`**: Evalúa una expresión regular sobre el contenido de un slot. Admite `negate: true` para fallar si el patrón coincide (útil para detectar leaks de secretos, lenguaje inapropiado, etc.) y `flags` opcional (ej. `"i"`, `"m"`, `"im"`) para controlar el matching. El flag global `g` se ignora deliberadamente para mantener el chequeo determinista.
 2. **`broken-ref`**: Busca plantillas tipo `{nombre_de_slot}` en un texto. Alerta si se referencia un slot que no está declarado en la especificación.
-3. **`schema`**: Si el formato del slot es `json`, valida la sintaxis y permite comprobar campos requeridos a través de JSON Schema simplificado.
-4. **`immutable-hash`** & **`immutable-slot-drift`**: Compara la firma del slot estático contra una lista de hashes firmada. Si el prompt estático cambia sin actualizar la firma, lanza error de compilación.
+3. **`schema`**: Valida que el contenido del slot sea JSON y comprueba las claves `required` de primer nivel (validación simplificada). Para JSON Schema **completo** (tipos, anidados, enums) usa el adaptador `ajv` registrando un handler `json-schema` — ver más abajo y en [docs/API.md](docs/API.md).
+4. **`immutable-hash`** & **`immutable-slot-drift`**: Compara la firma del slot contra una lista de hashes firmada. Si el contenido cambia sin actualizar la firma, produce un hallazgo de severidad `error` (útil para detectar drift/prompt-injection del system prompt).
 
 ### Reglas personalizadas
 
@@ -270,10 +270,12 @@ Para ver el framework en acción sobre un agente de revisión de código en un p
 ```bash
 npm run demo
 ```
-Ejecuta cuatro escenarios en orden y reporta su exit code:
+Ejecuta seis escenarios en orden y reporta su exit code:
 1. **PR válido** → ensambla el payload (exit 0).
 2. **Secreto hardcodeado en el diff** → bloqueado por la regla `no-secrets-allowed` (exit 1).
 3. **System prompt inmutable manipulado** → bloqueado por drift de hash SHA-256 (exit 1).
 4. **Guardia programática** (API del `Engine`) → rechaza el contexto sin llamar al LLM (exit 1).
+5. **RAG: presupuesto por prioridad** → los slots críticos sobreviven, los docs recuperados se compactan (exit 0).
+6. **Compliance: PII + JSON Schema (ajv) + prompt firmado** → aprueba lo conforme y bloquea lo que lleva PII/governance inválida (exit 0).
 
-Los fixtures viven en `example/` (`scenario-bad/`, `scenario-drift/`) y el ejemplo de integración programática en `example/demo-gate.ts`.
+Los fixtures viven en `example/` (`scenario-bad/`, `scenario-drift/`, `rag-inputs/`) y los ejemplos de integración programática en `example/demo-gate.ts`, `example/compliance-gate.ts` y `example/llm-anthropic.ts`.
