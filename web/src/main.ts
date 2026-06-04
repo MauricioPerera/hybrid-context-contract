@@ -92,6 +92,7 @@ interface UIState {
 const inputState: Record<string, string> = { ...DEFAULT_INPUTS };
 let renderedSlots: string[] = [];
 let budgetTouched = false;
+let lastPayload = ''; // raw assembled content, for the copy button
 
 const contractEl = $<HTMLTextAreaElement>('contract');
 const tokenizerEl = $<HTMLSelectElement>('tokenizer');
@@ -285,8 +286,29 @@ function renderResults(result: ReturnType<Engine['assemble']>, budget: number) {
     }
   }
 
-  // Payload
-  $('payload').textContent = result.content || '(vacío)';
+  // Payload — render per-slot so compacted slots are visually flagged.
+  lastPayload = result.content;
+  const payload = $('payload');
+  clear(payload);
+  const includedSlots = Object.entries(result.metadata.slotUsage).filter(([, u]) => u.status !== 'omitted');
+  if (includedSlots.length === 0) {
+    payload.appendChild(div('pl-empty', '(vacío)'));
+  } else {
+    const re = /=== START SLOT: (.+?) ===\n([\s\S]*?)\n=== END SLOT: \1 ===/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(result.content)) !== null) {
+      const name = m[1];
+      const text = m[2];
+      const status = result.metadata.slotUsage[name]?.status ?? 'ok';
+      const block = div('pl-slot pl-' + status);
+      const head = div('pl-head');
+      head.appendChild(div('pl-name', name));
+      head.appendChild(div('badge badge-' + status, status));
+      block.appendChild(head);
+      block.appendChild(div('pl-text', text));
+      payload.appendChild(block);
+    }
+  }
 }
 
 // --- Diff view -------------------------------------------------------------
@@ -426,8 +448,14 @@ $('share').addEventListener('click', async () => {
   catch { toast('Enlace generado en la URL'); }
 });
 $('copy-payload').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText($('payload').textContent || ''); toast('Payload copiado'); }
+  try { await navigator.clipboard.writeText(lastPayload); toast('Payload copiado'); }
   catch { toast('No se pudo copiar'); }
+});
+$('reset').addEventListener('click', () => {
+  try { localStorage.removeItem(LS_KEY); } catch { /* ignore */ }
+  history.replaceState(null, '', location.pathname);
+  applyState({ contract: DEFAULT_CONTRACT, inputs: { ...DEFAULT_INPUTS }, tokenizer: 'heuristic', interpolate: false, budget: null });
+  toast('Restablecido a valores por defecto');
 });
 
 // Diff tab: prefill with a v2 that weakens the contract (instant regressions).

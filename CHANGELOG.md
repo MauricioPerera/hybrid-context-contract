@@ -12,6 +12,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado
 - **Demo desplegada** en GitHub Pages: <https://mauricioperera.github.io/hybrid-context-contract/> (workflow de deploy automático en cada push a `main`).
 - **Playground — pulido de UX**: presets de escenarios (PR válido, fuga de secreto, compactación, interpolación), persistencia en `localStorage`, enlace compartible (estado codificado en la URL) y botón de copiar payload.
 - **Playground — visor de diff**: pestaña para comparar dos contratos (base/nuevo) y ver cambios por campo (from→to) y regresiones resaltadas, usando el mismo `diffContracts` del motor.
+- **Playground — payload por slot**: el payload ensamblado se muestra por slot con su estado (ok/truncated/summarized), resaltando en ámbar los slots compactados. Botón de reset a valores por defecto.
 
 ## [1.0.0] - 2026-06-03
 

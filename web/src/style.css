@@ -152,7 +152,19 @@ body {
 .finding-msg { font-size: 13px; margin-top: 2px; }
 
 .payload {
-  background: #0c0f17; border: 1px solid var(--border); border-radius: 10px; padding: 12px;
-  font-family: var(--mono); font-size: 12px; color: #cdd6e4; white-space: pre-wrap;
-  word-break: break-word; max-height: 360px; overflow: auto; margin: 0;
+  background: #0c0f17; border: 1px solid var(--border); border-radius: 10px; padding: 10px;
+  max-height: 360px; overflow: auto; margin: 0;
+}
+.pl-empty { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+.pl-slot {
+  border-left: 3px solid var(--border); border-radius: 0 8px 8px 0;
+  padding: 7px 10px; margin: 8px 0; background: rgba(255,255,255,.02);
+}
+.pl-slot:first-child { margin-top: 0; }
+.pl-slot.pl-truncated, .pl-slot.pl-summarized { border-left-color: var(--warn); background: rgba(210,153,34,.06); }
+.pl-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+.pl-name { font-family: var(--mono); font-size: 11.5px; color: var(--accent); }
+.pl-text {
+  font-family: var(--mono); font-size: 12px; color: #cdd6e4;
+  white-space: pre-wrap; word-break: break-word;
 }
