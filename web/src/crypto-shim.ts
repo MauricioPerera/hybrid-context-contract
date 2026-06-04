@@ -16,4 +16,6 @@ export function createHash(_algorithm: string) {
   };
 }
 
-export default { createHash };
+// NOTE: intentionally no `export default`. The engine imports `createHash` by name
+// (a hoisted function). A default export here produced a `get default(){return ti}`
+// getter in the prod bundle that hit a temporal-dead-zone ReferenceError.
