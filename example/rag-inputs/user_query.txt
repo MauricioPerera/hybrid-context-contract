@@ -1,0 +1,1 @@
+How do I rotate my API token, and does it invalidate existing sessions?

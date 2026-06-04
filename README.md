@@ -21,6 +21,31 @@ Un **Contrato de Contexto Híbrido** es una especificación estructural que decl
 
 ---
 
+## 🎯 Casos de uso
+
+El harness brilla donde **fallar en silencio cuesta caro**: producción, equipos, cumplimiento y agentes.
+
+| Caso | Qué aporta | Capacidades clave |
+|------|------------|-------------------|
+| **Guardia pre-flight en backends de LLM/agentes** | No filtrar secretos/PII, no reventar la ventana, blindar el system prompt | `assemble` + reglas + firma de inmutabilidad |
+| **Prompt linting en CI/CD** | Prompts como código: bloquear PRs que filtran, sobrepasan presupuesto o driftean | `hcc lint` / `hcc diff` / `hcc hash` (exit codes) |
+| **Contextos regulados (fin/salud/legal)** | Validación determinista y auditable; prompts firmados | reglas + `ajv` + firmas SHA-256 |
+| **Ensamblado RAG / memoria de agentes** | Reparto de la ventana por prioridad; los slots críticos sobreviven | budgeting + compactación por prioridad |
+| **Gobernanza de coste de tokens** | Ventanas predecibles, sin overflow silencioso | tokenizador real + presupuesto |
+| **Tests de regresión de contexto** | El payload es función pura → snapshoteable | determinismo |
+
+**No es ideal para**: prototipado casual, validar la *salida* del modelo (gobierna el input), o resumen real out-of-the-box (`summarize` trunca; inyecta un compactor propio). Ver el marco completo en [HARNESS.md](HARNESS.md).
+
+### Ejemplo: ensamblado RAG con presupuesto por prioridad
+
+[`example/rag-contract.yaml`](example/rag-contract.yaml) define un agente de soporte con ventana ajustada. Al ensamblar, los slots críticos sobreviven y solo los documentos recuperados (menor prioridad) se compactan:
+
+```bash
+npm run cli -- assemble --contract example/rag-contract.yaml --inputs example/rag-inputs --output /tmp/rag.txt
+# system: 35 (OK) · policies: 28 (OK) · user_query: 18 (OK) · history: 63 (OK)
+# retrieved_docs: 156 (SUMMARIZED)   ← solo esto se recorta para que el resto quepa
+```
+
 ## 🛠️ Estructura del Contrato (`CONTEXT.yaml`)
 
 El contrato se escribe en YAML o JSON bajo el esquema validado por Zod. Ejemplo básico:

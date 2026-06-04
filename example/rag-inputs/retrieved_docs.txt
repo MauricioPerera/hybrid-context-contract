@@ -1,0 +1,15 @@
+[doc:1] Token rotation: From Settings → Security → API Tokens, click "Rotate". A new token is generated immediately and the previous token is revoked. Any client still using the old token will receive 401 Unauthorized on its next request.
+
+[doc:2] Sessions vs tokens: API tokens are independent of browser sessions. Rotating an API token does NOT sign you out of the web dashboard; web sessions use a separate cookie-based mechanism with its own expiry.
+
+[doc:3] Propagation: Token rotation takes effect within a few seconds across all regions. There is no grace period during which both tokens are valid — the old token stops working as soon as the new one is issued.
+
+[doc:4] Best practices: Store tokens in a secret manager, never in source control. Rotate on a schedule and immediately after any suspected exposure. Use separate tokens per environment so rotating one does not break others.
+
+[doc:5] Troubleshooting after rotation: If you still get 401 after rotating, confirm the new token was copied without trailing whitespace, that it is sent as a Bearer token in the Authorization header, and that any cached client configuration was reloaded.
+
+[doc:6] Scopes: A rotated token preserves the scopes of the token it replaces. If you need different permissions, edit the token scopes after rotation; scope changes also take effect within seconds.
+
+[doc:7] Audit: Every rotation is recorded in the audit log with the actor, timestamp, and source IP. Admins can review rotations under Settings → Audit. Unexpected rotations may indicate a compromised account and should be investigated.
+
+[doc:8] Rate limits: Rotation itself is not rate-limited for admins, but excessive automated rotations may trigger security review. Prefer scheduled rotation over continuous churn.

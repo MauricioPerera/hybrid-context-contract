@@ -13,6 +13,7 @@ El formato sigue [Keep a Changelog](https://keepachangelog.com/) y el versionado
 - **Playground — pulido de UX**: presets de escenarios (PR válido, fuga de secreto, compactación, interpolación), persistencia en `localStorage`, enlace compartible (estado codificado en la URL) y botón de copiar payload.
 - **Playground — visor de diff**: pestaña para comparar dos contratos (base/nuevo) y ver cambios por campo (from→to) y regresiones resaltadas, usando el mismo `diffContracts` del motor.
 - **Playground — payload por slot**: el payload ensamblado se muestra por slot con su estado (ok/truncated/summarized), resaltando en ámbar los slots compactados. Botón de reset a valores por defecto.
+- **Ejemplo RAG** (`example/rag-contract.yaml` + `example/rag-inputs/`): demuestra el reparto de presupuesto por prioridad (los slots críticos sobreviven; los documentos recuperados se compactan). Añadido como CASO 5 del demo y sección "Casos de uso" en el README.
 
 ## [1.0.0] - 2026-06-03
 

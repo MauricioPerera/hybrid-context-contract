@@ -1,0 +1,66 @@
+version: "1.0.0"
+name: "RAGAgentContract"
+# Tight window on purpose: shows how priority decides what survives when context
+# does not fit. system/policies/user_query are protected; retrieved docs and
+# history get compacted first.
+maxTotalTokens: 300
+
+slots:
+  - name: "system"
+    source: "static"
+    priority: 0
+    immutable: true
+    compaction: "error"
+    required: true
+    description: "Core agent instructions — signed, must never drift."
+
+  - name: "policies"
+    source: "static"
+    priority: 1
+    compaction: "error"
+    required: true
+    description: "Answering policy — must fit verbatim or fail."
+
+  - name: "user_query"
+    source: "dynamic"
+    priority: 2
+    compaction: "truncate"
+    required: true
+    description: "The user's question — high priority, survives compaction."
+
+  - name: "history"
+    source: "state"
+    priority: 3
+    compaction: "summarize"
+    required: false
+    description: "Conversation history — budgeted before retrieved_docs, so it survives longer than the RAG chunks."
+
+  - name: "retrieved_docs"
+    source: "dynamic"
+    priority: 4
+    compaction: "summarize"
+    maxTokens: 800
+    required: true
+    description: "RAG chunks — lowest priority, compacted first to protect the rest."
+
+rules:
+  - name: "no-pii-in-query"
+    type: "regex"
+    targetSlot: "user_query"
+    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+    negate: true
+    severity: "error"
+    message: "Se detectó un patrón tipo SSN (PII) en la consulta del usuario."
+
+  - name: "no-secrets-in-docs"
+    type: "regex"
+    targetSlot: "retrieved_docs"
+    pattern: "(api_key|password|client_secret)\\s*=\\s*['\"][a-zA-Z0-9-_]{16,}['\"]"
+    negate: true
+    severity: "error"
+    message: "Un documento recuperado contiene un posible secreto hardcodeado."
+
+  - name: "check-refs"
+    type: "broken-ref"
+    targetSlot: "policies"
+    severity: "warning"

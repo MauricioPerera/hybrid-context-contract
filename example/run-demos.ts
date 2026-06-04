@@ -48,6 +48,15 @@ const cases: Case[] = [
     detail: 'El mismo motor embebido en backend rechaza el contexto sin llamar al LLM.',
     cmd: ['dist/example/demo-gate.js'],
     expectedExit: 1
+  },
+  {
+    title: 'CASO 5 — RAG: presupuesto por prioridad',
+    detail: 'Los slots críticos sobreviven; los docs recuperados (menor prioridad) se compactan.',
+    cmd: ['dist/src/cli.js', 'assemble',
+      '--contract', 'example/rag-contract.yaml',
+      '--inputs', 'example/rag-inputs',
+      '--output', 'example/scenario-rag-payload.txt'],
+    expectedExit: 0
   }
 ];
 

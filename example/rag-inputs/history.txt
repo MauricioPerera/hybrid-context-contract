@@ -1,0 +1,4 @@
+User: Hi, I'm having trouble with authentication.
+Assistant: Happy to help. Are you seeing a specific error?
+User: Yes, 401 on every request since yesterday.
+Assistant: That usually means an expired or rotated token. Let's check your token settings.

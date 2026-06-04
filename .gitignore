@@ -15,3 +15,4 @@ example/scenario-assembled.txt
 example/scenario-should-not-exist.txt
 example/scenario-generated-hashes.json
 example/scenario-test-hashes.json
+example/scenario-rag-payload.txt
