@@ -57,6 +57,12 @@ const cases: Case[] = [
       '--inputs', 'example/rag-inputs',
       '--output', 'example/scenario-rag-payload.txt'],
     expectedExit: 0
+  },
+  {
+    title: 'CASO 6 — Compliance: PII + JSON Schema (ajv) + prompt firmado',
+    detail: 'Caso limpio aprobado; caso con PII y governance inválida bloqueado.',
+    cmd: ['dist/example/compliance-gate.js'],
+    expectedExit: 0
   }
 ];
 

@@ -1,0 +1,67 @@
+version: "1.0.0"
+name: "ComplianceSupportAgentContract"
+maxTotalTokens: 1500
+
+slots:
+  - name: "system"
+    source: "static"
+    priority: 0
+    immutable: true
+    compaction: "error"
+    required: true
+    description: "Policy-bound instructions — signed; drift is a compliance incident."
+
+  - name: "governance"
+    source: "environment"
+    priority: 1
+    format: "json"
+    compaction: "error"
+    required: true
+    description: "Run-level governance metadata: data classification, consent, region."
+
+  - name: "case_notes"
+    source: "state"
+    priority: 2
+    compaction: "summarize"
+    required: false
+    description: "Customer/case notes — must not carry raw PII into the model."
+
+  - name: "user_message"
+    source: "dynamic"
+    priority: 3
+    compaction: "truncate"
+    required: true
+    description: "End-user message — screened for PII before inference."
+
+rules:
+  # Governance metadata must satisfy a full JSON Schema (types + enums), via the ajv adapter.
+  - name: "governance-schema"
+    type: "json-schema"
+    targetSlot: "governance"
+    schemaJson: "{\"type\":\"object\",\"required\":[\"data_classification\",\"consent\",\"region\"],\"properties\":{\"data_classification\":{\"enum\":[\"public\",\"internal\",\"confidential\",\"restricted\"]},\"consent\":{\"type\":\"boolean\"},\"region\":{\"type\":\"string\"}}}"
+    severity: "error"
+    message: "La metadata de governance no cumple la política (clasificación/consentimiento/región)."
+
+  - name: "no-ssn-in-message"
+    type: "regex"
+    targetSlot: "user_message"
+    pattern: "\\b\\d{3}-\\d{2}-\\d{4}\\b"
+    negate: true
+    severity: "error"
+    message: "PII detectada (patrón tipo SSN) en el mensaje del usuario."
+
+  - name: "no-email-in-message"
+    type: "regex"
+    targetSlot: "user_message"
+    pattern: "[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"
+    negate: true
+    severity: "error"
+    message: "PII detectada (email) en el mensaje del usuario."
+
+  - name: "no-card-in-notes"
+    type: "regex"
+    targetSlot: "case_notes"
+    pattern: "\\b\\d{4}[ -]?\\d{4}[ -]?\\d{4}[ -]?\\d{4}\\b"
+    negate: true
+    severity: "error"
+    message: "PII detectada (posible tarjeta) en las notas del caso."

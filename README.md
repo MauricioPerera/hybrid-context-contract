@@ -46,6 +46,10 @@ npm run cli -- assemble --contract example/rag-contract.yaml --inputs example/ra
 # retrieved_docs: 156 (SUMMARIZED)   ← solo esto se recorta para que el resto quepa
 ```
 
+### Ejemplo: gate de compliance (PII + governance + auditoría)
+
+[`example/compliance-gate.ts`](example/compliance-gate.ts) combina los tres pilares en un gate previo al modelo: screening de **PII** (SSN, email, tarjeta), validación de **governance** con JSON Schema completo (enums/tipos vía adaptador `ajv`) y **prompt firmado** (hash) para auditoría. Aprueba la solicitud conforme y bloquea la que lleva PII y metadata inválida (parte de `npm run demo`, CASO 6).
+
 ## 🛠️ Estructura del Contrato (`CONTEXT.yaml`)
 
 El contrato se escribe en YAML o JSON bajo el esquema validado por Zod. Ejemplo básico:
